@@ -13,7 +13,7 @@ NC='\033[0m'
 echo ""
 echo "  ╔══════════════════════════════════════════╗"
 echo "  ║       matrix-discord-killer              ║"
-echo "  ║   Self-hosted Matrix + Element stack     ║"
+echo "  ║   Matrix/Element or Stoat — your pick    ║"
 echo "  ╚══════════════════════════════════════════╝"
 echo ""
 

@@ -45,11 +45,14 @@ template() {
     cp "$src" "$dst"
     sed -i \
         -e "s|__DOMAIN__|${DOMAIN}|g" \
-        -e "s|__POSTGRES_PASSWORD__|${POSTGRES_PASSWORD}|g" \
-        -e "s|__REGISTRATION_SHARED_SECRET__|${REGISTRATION_SHARED_SECRET}|g" \
-        -e "s|__MACAROON_SECRET_KEY__|${MACAROON_SECRET_KEY}|g" \
-        -e "s|__FORM_SECRET__|${FORM_SECRET}|g" \
-        -e "s|__TURN_SHARED_SECRET__|${TURN_SHARED_SECRET}|g" \
+        -e "s|__POSTGRES_PASSWORD__|${POSTGRES_PASSWORD:-}|g" \
+        -e "s|__REGISTRATION_SHARED_SECRET__|${REGISTRATION_SHARED_SECRET:-}|g" \
+        -e "s|__MACAROON_SECRET_KEY__|${MACAROON_SECRET_KEY:-}|g" \
+        -e "s|__FORM_SECRET__|${FORM_SECRET:-}|g" \
+        -e "s|__TURN_SHARED_SECRET__|${TURN_SHARED_SECRET:-}|g" \
+        -e "s|__VAPID_PRIVATE_KEY__|${VAPID_PRIVATE_KEY:-}|g" \
+        -e "s|__VAPID_PUBLIC_KEY__|${VAPID_PUBLIC_KEY:-}|g" \
+        -e "s|__FILE_ENCRYPTION_KEY__|${FILE_ENCRYPTION_KEY:-}|g" \
         "$dst"
 }
 
@@ -63,7 +66,7 @@ fi
 echo ""
 echo -e "${BOLD}  ╔══════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}  ║       matrix-discord-killer              ║${NC}"
-echo -e "${BOLD}  ║   Self-hosted Matrix + Element stack     ║${NC}"
+echo -e "${BOLD}  ║   Self-hosted chat — your server         ║${NC}"
 echo -e "${BOLD}  ╚══════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -77,9 +80,34 @@ if [ -f "$INSTALL_DIR/.env" ]; then
     fi
 fi
 
+# ─── Platform selection ──────────────────────────────────────────────
+
+echo -e "${BOLD}Select your chat platform:${NC}"
+echo ""
+echo "  [1] Matrix/Element  - Federated, E2EE, Discord/Telegram bridges"
+echo "  [2] Stoat (Revolt)  - Modern UI, simple setup, no federation"
+echo ""
+
+while true; do
+    read -rp "  Platform (1 or 2): " platform_choice
+    case "$platform_choice" in
+        1) PLATFORM="matrix"; break ;;
+        2) PLATFORM="stoat"; break ;;
+        *) echo -e "  ${RED}Enter 1 or 2.${NC}" ;;
+    esac
+done
+
+echo ""
+
+if [ "$PLATFORM" = "matrix" ]; then
+    total_steps=11
+else
+    total_steps=7
+fi
+
 # ─── User prompts ────────────────────────────────────────────────────
 
-echo -e "${BOLD}Configure your Matrix server:${NC}"
+echo -e "${BOLD}Configure your server:${NC}"
 echo ""
 
 # Domain
@@ -100,42 +128,54 @@ while true; do
     echo -e "  ${RED}Invalid email address.${NC}"
 done
 
-# Admin password
-while true; do
-    read -rsp "  Admin account password (min 8 chars): " ADMIN_PASSWORD
+# Matrix-only prompts
+if [ "$PLATFORM" = "matrix" ]; then
+    # Admin password
+    while true; do
+        read -rsp "  Admin account password (min 8 chars): " ADMIN_PASSWORD
+        echo ""
+        if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
+            break
+        fi
+        echo -e "  ${RED}Password must be at least 8 characters.${NC}"
+    done
+
+    # Bridges
     echo ""
-    if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
-        break
+    read -rp "  Install Discord bridge? (Y/n): " discord_choice
+    ENABLE_DISCORD=false
+    if [[ ! "$discord_choice" =~ ^[Nn]$ ]]; then
+        ENABLE_DISCORD=true
     fi
-    echo -e "  ${RED}Password must be at least 8 characters.${NC}"
-done
 
-# Bridges
-echo ""
-read -rp "  Install Discord bridge? (Y/n): " discord_choice
-ENABLE_DISCORD=false
-if [[ ! "$discord_choice" =~ ^[Nn]$ ]]; then
-    ENABLE_DISCORD=true
-fi
-
-read -rp "  Install Telegram bridge? (Y/n): " telegram_choice
-ENABLE_TELEGRAM=false
-if [[ ! "$telegram_choice" =~ ^[Nn]$ ]]; then
-    ENABLE_TELEGRAM=true
+    read -rp "  Install Telegram bridge? (Y/n): " telegram_choice
+    ENABLE_TELEGRAM=false
+    if [[ ! "$telegram_choice" =~ ^[Nn]$ ]]; then
+        ENABLE_TELEGRAM=true
+    fi
 fi
 
 echo ""
 echo -e "${GREEN}Configuration:${NC}"
+echo "  Platform:        $PLATFORM"
 echo "  Domain:          $DOMAIN"
 echo "  Email:           $ACME_EMAIL"
-echo "  Discord bridge:  $ENABLE_DISCORD"
-echo "  Telegram bridge: $ENABLE_TELEGRAM"
+if [ "$PLATFORM" = "matrix" ]; then
+    echo "  Discord bridge:  $ENABLE_DISCORD"
+    echo "  Telegram bridge: $ENABLE_TELEGRAM"
+fi
 echo ""
 read -rp "Proceed with installation? (Y/n): " proceed
 if [[ "$proceed" =~ ^[Nn]$ ]]; then
     echo "Aborted."
     exit 0
 fi
+
+# ══════════════════════════════════════════════════════════════════════
+# MATRIX PATH
+# ══════════════════════════════════════════════════════════════════════
+
+if [ "$PLATFORM" = "matrix" ]; then
 
 # ─── [1/11] Install dependencies ─────────────────────────────────────
 
@@ -208,6 +248,7 @@ ok
 step "Writing environment file..."
 
 cat > "$INSTALL_DIR/.env" <<ENVEOF
+PLATFORM=matrix
 DOMAIN=$DOMAIN
 ACME_EMAIL=$ACME_EMAIL
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -496,6 +537,7 @@ matrix-discord-killer credentials
 Generated: $GENERATED_AT
 ═══════════════════════════════════════════════
 
+Platform:            Matrix/Element
 Domain:              $DOMAIN
 Element Web:         https://$DOMAIN
 Admin Account:       @admin:$DOMAIN
@@ -546,3 +588,188 @@ echo -e "  ${CYAN}Need a VPS? Get \$200 free credit:${NC}"
 echo -e "  https://your-affiliate-link-here.example.com"
 echo -e "  ─────────────────────────────────────────────"
 echo ""
+
+# ══════════════════════════════════════════════════════════════════════
+# STOAT PATH
+# ══════════════════════════════════════════════════════════════════════
+
+else
+
+# ─── [1/7] Install dependencies ──────────────────────────────────────
+
+step "Installing system dependencies..."
+
+export DEBIAN_FRONTEND=noninteractive
+if ! apt-get update -qq >/dev/null 2>&1; then
+    fail "apt-get update failed. Check your internet connection and package sources."
+fi
+if ! apt-get install -y -qq curl openssl ufw >/dev/null 2>&1; then
+    fail "Failed to install system packages (curl, openssl, ufw)."
+fi
+
+# Docker
+if ! command -v docker &>/dev/null; then
+    if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
+        fail "Docker installation failed. Install manually: https://docs.docker.com/engine/install/"
+    fi
+fi
+
+# Verify docker compose plugin
+if ! docker compose version &>/dev/null; then
+    if ! apt-get install -y -qq docker-compose-plugin >/dev/null 2>&1; then
+        fail "Docker Compose plugin installation failed."
+    fi
+fi
+
+ok
+
+# ─── [2/7] Generate secrets ─────────────────────────────────────────
+
+step "Generating secrets..."
+
+# On re-run, preserve existing secrets
+if [ -f "$INSTALL_DIR/.env" ]; then
+    VAPID_PRIVATE_KEY=$(grep "^VAPID_PRIVATE_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
+    VAPID_PUBLIC_KEY=$(grep "^VAPID_PUBLIC_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
+    FILE_ENCRYPTION_KEY=$(grep "^FILE_ENCRYPTION_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
+fi
+
+# Generate VAPID keys if missing
+if [ -z "${VAPID_PRIVATE_KEY:-}" ] || [ -z "${VAPID_PUBLIC_KEY:-}" ]; then
+    VAPID_TEMP=$(mktemp)
+    openssl ecparam -name prime256v1 -genkey -noout -out "$VAPID_TEMP" 2>/dev/null
+    VAPID_PRIVATE_KEY=$(base64 < "$VAPID_TEMP" | tr -d '\n' | tr -d '=')
+    VAPID_PUBLIC_KEY=$(openssl ec -in "$VAPID_TEMP" -outform DER 2>/dev/null | tail -c 65 | base64 | tr '/+' '_-' | tr -d '\n' | tr -d '=')
+    rm -f "$VAPID_TEMP"
+fi
+
+FILE_ENCRYPTION_KEY="${FILE_ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
+
+ok
+
+# ─── [3/7] Create directory structure ────────────────────────────────
+
+step "Creating directory structure..."
+
+mkdir -p \
+    "$DATA_DIR/db" \
+    "$DATA_DIR/rabbit" \
+    "$DATA_DIR/minio" \
+    "$DATA_DIR/caddy-data" \
+    "$DATA_DIR/caddy-config"
+
+ok
+
+# ─── [4/7] Write configuration files ────────────────────────────────
+
+step "Writing configuration files..."
+
+# .env
+cat > "$INSTALL_DIR/.env" <<ENVEOF
+PLATFORM=stoat
+COMPOSE_FILE=docker-compose.stoat.yml
+DOMAIN=$DOMAIN
+ACME_EMAIL=$ACME_EMAIL
+VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY
+VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY
+FILE_ENCRYPTION_KEY=$FILE_ENCRYPTION_KEY
+ENVEOF
+
+chmod 600 "$INSTALL_DIR/.env"
+
+# Revolt.toml
+template "$INSTALL_DIR/templates/revolt.toml.template" "$INSTALL_DIR/Revolt.toml"
+
+# .env.web (Caddy hostname + web client API URL)
+template "$INSTALL_DIR/templates/stoat-env.web.template" "$INSTALL_DIR/.env.web"
+
+# Caddyfile
+cp "$INSTALL_DIR/templates/Caddyfile.template" "$INSTALL_DIR/Caddyfile"
+
+ok
+
+# ─── [5/7] Configure firewall ───────────────────────────────────────
+
+step "Configuring firewall..."
+
+ufw allow 22/tcp >/dev/null 2>&1
+ufw allow 80/tcp >/dev/null 2>&1
+ufw allow 443/tcp >/dev/null 2>&1
+ufw --force enable >/dev/null 2>&1 || true
+
+ok
+
+# ─── [6/7] Start Stoat stack ────────────────────────────────────────
+
+step "Starting Stoat stack (this may take a few minutes on first run)..."
+
+cd "$INSTALL_DIR"
+
+COMPOSE_EXIT=0
+docker compose up -d 2>&1 || COMPOSE_EXIT=$?
+if [ "$COMPOSE_EXIT" -ne 0 ]; then
+    fail "Docker Compose failed to start (exit $COMPOSE_EXIT). Check: docker compose logs"
+fi
+
+ok
+
+# ─── [7/7] Verify services ──────────────────────────────────────────
+
+step "Verifying services..."
+
+echo -n "  Waiting for API..."
+for i in $(seq 1 60); do
+    if curl -sf "http://localhost:14702/" >/dev/null 2>&1; then
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        fail "Stoat API failed to start within 120 seconds. Check: docker compose logs api"
+    fi
+    sleep 2
+done
+
+ok
+
+# ─── Save credentials ───────────────────────────────────────────────
+
+CRED_FILE="$INSTALL_DIR/credentials.txt"
+GENERATED_AT=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+cat > "$CRED_FILE" <<CREDEOF
+matrix-discord-killer credentials
+Generated: $GENERATED_AT
+═══════════════════════════════════════════════
+
+Platform:            Stoat (Revolt)
+Domain:              $DOMAIN
+Web Client:          https://$DOMAIN
+
+Register your account at the URL above.
+The first registered user becomes the server owner.
+
+VAPID Public Key:    $VAPID_PUBLIC_KEY
+CREDEOF
+
+chmod 600 "$CRED_FILE"
+
+# ─── Summary ─────────────────────────────────────────────────────────
+
+echo ""
+echo ""
+echo -e "${GREEN}  ╔══════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}  ║       Installation Complete!             ║${NC}"
+echo -e "${GREEN}  ╚══════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "  ${BOLD}Stoat:${NC}            https://${DOMAIN}"
+echo -e "  ${BOLD}Register:${NC}         Create your account at the URL above"
+echo -e "  ${BOLD}Credentials:${NC}      $CRED_FILE"
+echo ""
+echo -e "  ${YELLOW}Tip:${NC} The first registered account becomes the server owner."
+echo -e "  ${YELLOW}Note:${NC} Caddy handles SSL automatically — no certbot needed."
+echo ""
+echo -e "  ─────────────────────────────────────────────"
+echo -e "  ${CYAN}Need a VPS? Get \$200 free credit:${NC}"
+echo -e "  https://your-affiliate-link-here.example.com"
+echo -e "  ─────────────────────────────────────────────"
+echo ""
+
+fi

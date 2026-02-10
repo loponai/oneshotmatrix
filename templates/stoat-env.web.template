@@ -1,0 +1,2 @@
+HOSTNAME=https://__DOMAIN__
+REVOLT_PUBLIC_URL=https://__DOMAIN__/api

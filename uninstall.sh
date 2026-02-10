@@ -20,12 +20,25 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# Detect platform
+PLATFORM="matrix"
+if [ -f "$INSTALL_DIR/.env" ]; then
+    PLATFORM=$(grep "^PLATFORM=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
+    PLATFORM="${PLATFORM:-matrix}"
+fi
+
 echo -e "${YELLOW}WARNING: This will permanently destroy:${NC}"
 echo "  - All Docker containers and volumes"
-echo "  - All Matrix data (messages, media, accounts)"
-echo "  - PostgreSQL database"
-echo "  - SSL certificates"
-echo "  - Coturn configuration"
+if [ "$PLATFORM" = "stoat" ]; then
+    echo "  - All Stoat data (messages, media, accounts)"
+    echo "  - MongoDB database"
+    echo "  - MinIO file storage"
+else
+    echo "  - All Matrix data (messages, media, accounts)"
+    echo "  - PostgreSQL database"
+    echo "  - SSL certificates"
+    echo "  - Coturn configuration"
+fi
 echo "  - UFW firewall rules added by the installer"
 echo ""
 read -rp "Type 'DELETE EVERYTHING' to confirm: " confirm
@@ -38,50 +51,86 @@ fi
 echo ""
 
 # Stop and remove containers
-if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
-    echo "[1/5] Stopping Docker containers..."
-    cd "$INSTALL_DIR"
-    docker compose --profile discord-bridge --profile telegram-bridge down -v 2>/dev/null || true
+if [ "$PLATFORM" = "stoat" ]; then
+    if [ -f "$INSTALL_DIR/docker-compose.stoat.yml" ]; then
+        echo "[1/4] Stopping Docker containers..."
+        cd "$INSTALL_DIR"
+        docker compose -f docker-compose.stoat.yml down -v 2>/dev/null || true
+        echo -e "       ${GREEN}[OK]${NC}"
+    fi
+
+    # Remove data
+    echo "[2/4] Removing data directory..."
+    rm -rf "$INSTALL_DIR/data"
+    echo -e "       ${GREEN}[OK]${NC}"
+
+    # No certbot for Stoat
+    echo "[3/4] No SSL certificates to remove (Caddy auto-manages)..."
+    echo -e "       ${GREEN}[OK]${NC}"
+
+    # Remove UFW rules (Stoat only uses 80/443)
+    echo "[4/4] Removing firewall rules..."
+    if command -v ufw &>/dev/null; then
+        ufw delete allow 80/tcp 2>/dev/null || true
+        ufw delete allow 443/tcp 2>/dev/null || true
+    fi
+    echo -e "       ${GREEN}[OK]${NC}"
+else
+    if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        echo "[1/5] Stopping Docker containers..."
+        cd "$INSTALL_DIR"
+        docker compose --profile discord-bridge --profile telegram-bridge down -v 2>/dev/null || true
+        echo -e "       ${GREEN}[OK]${NC}"
+    fi
+
+    # Remove data
+    echo "[2/5] Removing data directory..."
+    rm -rf "$INSTALL_DIR/data"
+    echo -e "       ${GREEN}[OK]${NC}"
+
+    # Remove certbot certs and cron
+    echo "[3/5] Removing SSL certificates and renewal cron..."
+    DOMAIN=""
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        DOMAIN=$(grep "^DOMAIN=" "$INSTALL_DIR/.env" | cut -d= -f2)
+    fi
+    if [ -n "$DOMAIN" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+        certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true
+    fi
+    crontab -l 2>/dev/null | grep -v "matrix-discord-killer" | crontab - 2>/dev/null || true
+    echo -e "       ${GREEN}[OK]${NC}"
+
+    # Remove UFW rules
+    echo "[4/5] Removing firewall rules..."
+    if command -v ufw &>/dev/null; then
+        ufw delete allow 80/tcp 2>/dev/null || true
+        ufw delete allow 443/tcp 2>/dev/null || true
+        ufw delete allow 8448/tcp 2>/dev/null || true
+        ufw delete allow 3478/tcp 2>/dev/null || true
+        ufw delete allow 3478/udp 2>/dev/null || true
+        ufw delete allow 5349/tcp 2>/dev/null || true
+        ufw delete allow 5349/udp 2>/dev/null || true
+        ufw delete allow 49152:49200/udp 2>/dev/null || true
+    fi
+    echo -e "       ${GREEN}[OK]${NC}"
+
+    # Remove install directory (Matrix has extra step)
+    echo "[5/5] Removing $INSTALL_DIR..."
+    cd /
+    rm -rf "$INSTALL_DIR"
     echo -e "       ${GREEN}[OK]${NC}"
 fi
 
-# Remove data
-echo "[2/5] Removing data directory..."
-rm -rf "$INSTALL_DIR/data"
-echo -e "       ${GREEN}[OK]${NC}"
-
-# Remove certbot certs and cron
-echo "[3/5] Removing SSL certificates and renewal cron..."
-DOMAIN=""
-if [ -f "$INSTALL_DIR/.env" ]; then
-    DOMAIN=$(grep "^DOMAIN=" "$INSTALL_DIR/.env" | cut -d= -f2)
+# Remove install directory (common for both, but Matrix already does it in 5/5)
+if [ "$PLATFORM" = "stoat" ]; then
+    cd /
+    rm -rf "$INSTALL_DIR"
 fi
-if [ -n "$DOMAIN" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true
-fi
-crontab -l 2>/dev/null | grep -v "matrix-discord-killer" | crontab - 2>/dev/null || true
-echo -e "       ${GREEN}[OK]${NC}"
-
-# Remove UFW rules
-echo "[4/5] Removing firewall rules..."
-if command -v ufw &>/dev/null; then
-    ufw delete allow 80/tcp 2>/dev/null || true
-    ufw delete allow 443/tcp 2>/dev/null || true
-    ufw delete allow 8448/tcp 2>/dev/null || true
-    ufw delete allow 3478/tcp 2>/dev/null || true
-    ufw delete allow 3478/udp 2>/dev/null || true
-    ufw delete allow 5349/tcp 2>/dev/null || true
-    ufw delete allow 5349/udp 2>/dev/null || true
-    ufw delete allow 49152:49200/udp 2>/dev/null || true
-fi
-echo -e "       ${GREEN}[OK]${NC}"
-
-# Remove install directory
-echo "[5/5] Removing $INSTALL_DIR..."
-cd /
-rm -rf "$INSTALL_DIR"
-echo -e "       ${GREEN}[OK]${NC}"
 
 echo ""
-echo -e "${GREEN}Uninstall complete.${NC} All Matrix data has been destroyed."
+if [ "$PLATFORM" = "stoat" ]; then
+    echo -e "${GREEN}Uninstall complete.${NC} All Stoat data has been destroyed."
+else
+    echo -e "${GREEN}Uninstall complete.${NC} All Matrix data has been destroyed."
+fi
 echo "Docker images remain cached. Run 'docker image prune -a' to free disk space."

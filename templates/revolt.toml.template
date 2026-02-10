@@ -1,0 +1,13 @@
+[hosts]
+app = "https://__DOMAIN__"
+api = "https://__DOMAIN__/api"
+events = "wss://__DOMAIN__/ws"
+autumn = "https://__DOMAIN__/autumn"
+january = "https://__DOMAIN__/january"
+
+[pushd.vapid]
+private_key = "__VAPID_PRIVATE_KEY__"
+public_key = "__VAPID_PUBLIC_KEY__"
+
+[files]
+encryption_key = "__FILE_ENCRYPTION_KEY__"

@@ -1,0 +1,184 @@
+services:
+  database:
+    image: mongo:latest
+    restart: unless-stopped
+    volumes:
+      - ./data/db:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok", "--quiet"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - stoat
+
+  redis:
+    image: eqalpha/keydb:latest
+    restart: unless-stopped
+    networks:
+      - stoat
+
+  rabbit:
+    image: rabbitmq:4
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbituser
+      RABBITMQ_DEFAULT_PASS: rabbitpass
+    volumes:
+      - ./data/rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - stoat
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    restart: unless-stopped
+    volumes:
+      - ./data/minio:/data
+    environment:
+      MINIO_ROOT_USER: minioautumn
+      MINIO_ROOT_PASSWORD: minioautumn
+      MINIO_DOMAIN: minio
+    networks:
+      stoat:
+        aliases:
+          - revolt-uploads.minio
+          - attachments.minio
+          - avatars.minio
+          - backgrounds.minio
+          - icons.minio
+          - banners.minio
+          - emojis.minio
+
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      while ! /usr/bin/mc ready minio; do
+        /usr/bin/mc alias set minio http://minio:9000 minioautumn minioautumn;
+        echo 'Waiting minio...' && sleep 1;
+      done;
+      /usr/bin/mc mb minio/revolt-uploads;
+      exit 0;
+      "
+    networks:
+      - stoat
+
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    env_file: .env.web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy-data:/data
+      - ./data/caddy-config:/config
+    networks:
+      - stoat
+
+  api:
+    image: ghcr.io/revoltchat/server:20250930-2
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbit:
+        condition: service_healthy
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+  events:
+    image: ghcr.io/revoltchat/bonfire:20250930-2
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+  web:
+    image: ghcr.io/revoltchat/client:master
+    restart: unless-stopped
+    env_file: .env.web
+    networks:
+      - stoat
+
+  autumn:
+    image: ghcr.io/revoltchat/autumn:20250930-2
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      createbuckets:
+        condition: service_started
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+  january:
+    image: ghcr.io/revoltchat/january:20250930-2
+    restart: unless-stopped
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+  gifbox:
+    image: ghcr.io/revoltchat/gifbox:20250930-2
+    restart: unless-stopped
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+  crond:
+    image: ghcr.io/revoltchat/crond:20250930-2
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+  pushd:
+    image: ghcr.io/revoltchat/pushd:20250930-2
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbit:
+        condition: service_healthy
+    volumes:
+      - ./Revolt.toml:/Revolt.toml:ro
+    networks:
+      - stoat
+
+networks:
+  stoat:
+    driver: bridge
