@@ -1,0 +1,35 @@
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    client_max_body_size 100M;
+
+    # Logging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    # Gzip
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=matrix_login:10m rate=5r/s;
+    limit_req_zone $binary_remote_addr zone=matrix_general:10m rate=30r/s;
+
+    # Include server blocks
+    include /etc/nginx/conf.d/*.conf;
+}

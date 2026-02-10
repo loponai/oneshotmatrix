@@ -1,0 +1,20 @@
+# Environment and secrets
+.env
+credentials.txt
+
+# Runtime data
+data/
+
+# SSL certificates (managed by certbot)
+certbot/
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

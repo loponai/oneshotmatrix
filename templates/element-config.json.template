@@ -1,0 +1,35 @@
+{
+    "default_server_config": {
+        "m.homeserver": {
+            "base_url": "https://__DOMAIN__",
+            "server_name": "__DOMAIN__"
+        },
+        "m.identity_server": {
+            "base_url": "https://vector.im"
+        }
+    },
+    "brand": "Element",
+    "integrations_ui_url": "https://scalar.vector.im/",
+    "integrations_rest_url": "https://scalar.vector.im/api",
+    "integrations_widgets_urls": [
+        "https://scalar.vector.im/_matrix/integrations/v1",
+        "https://scalar.vector.im/api",
+        "https://scalar-staging.vector.im/_matrix/integrations/v1",
+        "https://scalar-staging.vector.im/api",
+        "https://scalar-staging.riot.im/scalar/api"
+    ],
+    "default_theme": "dark",
+    "room_directory": {
+        "servers": ["__DOMAIN__", "matrix.org"]
+    },
+    "features": {
+        "feature_video_rooms": true,
+        "feature_group_calls": true
+    },
+    "setting_defaults": {
+        "breadcrumbs": true
+    },
+    "jitsi": {
+        "preferred_domain": "meet.element.io"
+    }
+}
