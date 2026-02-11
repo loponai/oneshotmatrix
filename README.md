@@ -109,9 +109,13 @@ Open your domain in a browser. That's it.
 
 ### Stoat (Revolt)
 - **Stoat Web Client** — Discord-like chat UI
-- **Revolt API** — Rust backend with MongoDB
+- **Stoat API** — Rust backend with MongoDB
 - **Caddy** — Reverse proxy with auto HTTPS
 - File uploads, push notifications, URL previews built in
+
+> **Why does the app say "Revolt"?** Stoat was previously called Revolt before a [rebrand in late 2025](https://wiki.rvlt.gg/index.php/Rebrand_to_Stoat). The web client hasn't been updated with the new branding yet. Same software, same team, just a new name.
+>
+> **"API error" on first load?** This is normal — the services take 30-60 seconds to fully start after the installer finishes. Wait a moment and refresh the page.
 
 ## Why Scala Hosting?
 
