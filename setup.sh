@@ -156,6 +156,21 @@ fw_reload() {
     # ufw applies changes immediately, no reload needed
 }
 
+install_docker() {
+    # Try get.docker.com first (works on most distros)
+    if curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
+        return 0
+    fi
+    # Fallback for RHEL-family: add Docker repo manually (get.docker.com may not support newer Rocky/RHEL)
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo >/dev/null 2>&1 || return 1
+        dnf install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1 || return 1
+        systemctl enable --now docker >/dev/null 2>&1 || return 1
+        return 0
+    fi
+    return 1
+}
+
 # ─── Pre-flight ──────────────────────────────────────────────────────
 
 # Reopen stdin for interactive prompts (curl pipes eat stdin in install.sh)
@@ -321,22 +336,17 @@ else
     fi
 fi
 
-# Docker (get.docker.com also installs the compose plugin)
+# Docker
 if ! command -v docker &>/dev/null; then
-    if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
+    if ! install_docker; then
         fail "Docker installation failed. Try manually: https://docs.docker.com/engine/install/"
     fi
 fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
-    # On Debian, the plugin can be installed separately; on RHEL get.docker.com handles it
-    if [ "$OS_FAMILY" = "debian" ]; then
-        if ! pkg_install docker-compose-plugin; then
-            fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
-        fi
-    else
-        fail "Docker Compose plugin missing. Try reinstalling Docker: curl -fsSL https://get.docker.com | sh"
+    if ! pkg_install docker-compose-plugin; then
+        fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
     fi
 fi
 
@@ -762,21 +772,17 @@ else
     fi
 fi
 
-# Docker (get.docker.com also installs the compose plugin)
+# Docker
 if ! command -v docker &>/dev/null; then
-    if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
+    if ! install_docker; then
         fail "Docker installation failed. Try manually: https://docs.docker.com/engine/install/"
     fi
 fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
-    if [ "$OS_FAMILY" = "debian" ]; then
-        if ! pkg_install docker-compose-plugin; then
-            fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
-        fi
-    else
-        fail "Docker Compose plugin missing. Try reinstalling Docker: curl -fsSL https://get.docker.com | sh"
+    if ! pkg_install docker-compose-plugin; then
+        fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
     fi
 fi
 
