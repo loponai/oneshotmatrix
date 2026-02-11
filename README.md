@@ -21,40 +21,50 @@ We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-man
 
 ### Step 2: Get a domain and point it to your server
 
-You need a domain name that points to your VPS. The easiest way is to register one through Scala during checkout — it keeps everything in one place.
+You need a domain name that points to your VPS IP address. You can register one through Scala during checkout, or use one you already own.
 
-> **Already have a domain elsewhere?** Just create an A record pointing to your VPS IP in your registrar's DNS settings and skip ahead to Step 3. Cloudflare users: set the proxy to **DNS only** (grey cloud).
+**Important:** Do NOT use SPanel or the VPS's built-in nameservers for DNS. In Step 3 we disable SPanel, which would kill the VPS's DNS server and break your domain. Use **external DNS** instead (Cloudflare is free and works great).
 
-**If you registered your domain through Scala:**
+#### Set up DNS with Cloudflare (recommended)
 
-Nameservers are set automatically, but you still need to create an A record so the domain actually points to your VPS IP. Here's how:
+1. **Find your VPS IP** — it's in the welcome email from Scala
+2. **Create a free [Cloudflare](https://dash.cloudflare.com/sign-up) account** if you don't have one
+3. **Add your domain** to Cloudflare — it will give you two nameservers (e.g. `ann.ns.cloudflare.com`, `bob.ns.cloudflare.com`)
+4. **Update your domain's nameservers** — go to [my.scalahosting.com](https://my.scalahosting.com) > My Domains > click Manage next to your domain > Manage Nameservers > select "Use custom nameservers" and enter the two Cloudflare nameservers
+5. **Add an A record in Cloudflare** — go to your domain in the Cloudflare dashboard > DNS > Add Record:
 
-1. **Find your VPS IP** — it's in the welcome email from Scala, or in SPanel under Server Management > Server Information
-2. **Log into SPanel** — go to `https://YOUR_VPS_IP/spanel/` and log in with your account credentials
-3. **Open the DNS Editor** — under the "Domains" section, click **DNS Editor**
-4. **Select your domain** from the dropdown if you have more than one
-5. **Add a new A record:**
+| Type | Name | Content | Proxy status |
+|------|------|---------|-------------|
+| A | `@` (or a subdomain like `chat`) | Your VPS IP | **DNS only** (grey cloud) |
 
-| Field | What to enter |
-|-------|--------------|
-| Name | `@` for the root domain (example.com), or a subdomain like `chat` (for chat.example.com) |
-| TTL | Leave as default (14400) |
-| Type | **A** |
-| Value | Your VPS IP address |
+> **The proxy must be off (grey cloud, "DNS only").** Cloudflare's proxy doesn't support port 8448 (Matrix federation) and blocks SSL certificate generation.
 
-6. Click **Add Record**
+6. Wait for nameserver changes to propagate (can take up to 24-48 hours, usually faster)
 
-Wait a few hours for DNS to propagate. You can check with `ping yourdomain.com` or an online DNS checker.
+#### Alternative: Use your registrar's DNS
+
+If you don't want to use Cloudflare, you can create the A record in whatever registrar you bought the domain from (Namecheap, Porkbun, etc.) — just make sure you're **not** using the VPS as your nameserver.
 
 ### Step 3: SSH in and disable SPanel
 
-Scala includes their SPanel control panel by default, which runs a web server on ports 80/443. We need those ports, so disable it first:
+SSH is how you remotely control your server from a terminal. You type commands on your computer and they run on the VPS.
+
+**On Mac/Linux:** Open Terminal (it's built in).
+
+**On Windows:** Open **PowerShell** (search for it in the Start menu) or install [Windows Terminal](https://aka.ms/terminal) from the Microsoft Store.
+
+Then connect to your server:
 
 ```bash
 ssh root@YOUR_SERVER_IP
 ```
 
-Use the root password from your Scala welcome email. Then run:
+Replace `YOUR_SERVER_IP` with the IP from your Scala welcome email (e.g. `ssh root@142.248.180.64`).
+
+- It will ask "Are you sure you want to continue connecting?" — type `yes` and press Enter
+- Enter the **root password** from your Scala welcome email (the cursor won't move as you type — that's normal, it's hidden)
+
+Once you're in, you'll see a command prompt on your server. Now disable SPanel's web server so our installer can use ports 80/443:
 
 ```bash
 systemctl mask --now httpd
