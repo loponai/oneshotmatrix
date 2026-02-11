@@ -21,22 +21,30 @@ We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-man
 
 ### Step 2: Get a domain and point it to your server
 
-You need a domain name (like `chat.example.com`) that points to your VPS. If you don't already have one:
+You need a domain name that points to your VPS. The easiest way is to register one through Scala during checkout — it keeps everything in one place.
 
-- **Easiest option:** Register a domain directly through [Scala Hosting](http://scala.tomspark.tech/) during checkout — keeps everything in one place. You'll get a confirmation email (may take a few minutes).
-- **Or** buy one from [Namecheap](https://www.namecheap.com), [Porkbun](https://porkbun.com), or [Cloudflare Domains](https://www.cloudflare.com/products/registrar/) — usually ~$10/year for a `.com`
+> **Already have a domain elsewhere?** Just create an A record pointing to your VPS IP in your registrar's DNS settings and skip ahead to Step 3. Cloudflare users: set the proxy to **DNS only** (grey cloud).
 
-Then go to your DNS settings and **create an A record** pointing to your Scala VPS IP address:
+**If you registered your domain through Scala:**
 
-| Type | Name | Value |
-|------|------|-------|
-| A | chat.example.com | YOUR_SERVER_IP |
+Nameservers are set automatically, but you still need to create an A record so the domain actually points to your VPS IP. Here's how:
 
-Your server IP is in the welcome email from Scala. If you want to use a subdomain like `chat.example.com`, put `chat` in the Name field. If you want the whole domain (like `example.com`), put `@`.
+1. **Find your VPS IP** — it's in the welcome email from Scala, or in SPanel under Server Management > Server Information
+2. **Log into SPanel** — go to `https://YOUR_VPS_IP/spanel/` and log in with your account credentials
+3. **Open the DNS Editor** — under the "Domains" section, click **DNS Editor**
+4. **Select your domain** from the dropdown if you have more than one
+5. **Add a new A record:**
 
-Wait 5-15 minutes for DNS to propagate before moving on.
+| Field | What to enter |
+|-------|--------------|
+| Name | `@` for the root domain (example.com), or a subdomain like `chat` (for chat.example.com) |
+| TTL | Leave as default (14400) |
+| Type | **A** |
+| Value | Your VPS IP address |
 
-> **Cloudflare users:** Set the proxy to **DNS only** (grey cloud). Cloudflare doesn't support port 8448 (Matrix federation) and can interfere with SSL certificate generation.
+6. Click **Add Record**
+
+Wait a few hours for DNS to propagate. You can check with `ping yourdomain.com` or an online DNS checker.
 
 ### Step 3: SSH in and disable SPanel
 
