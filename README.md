@@ -23,9 +23,10 @@ We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-man
 
 You need a domain name (like `chat.example.com`) that points to your VPS. If you don't already have one:
 
-1. **Buy a domain** from a registrar like [Namecheap](https://www.namecheap.com), [Porkbun](https://porkbun.com), or [Cloudflare Domains](https://www.cloudflare.com/products/registrar/) — usually ~$10/year for a `.com`
-2. **Go to your registrar's DNS settings** (or Cloudflare if you use it for DNS)
-3. **Create an A record** pointing to your Scala VPS IP address:
+- **Easiest option:** Register a domain directly through [Scala Hosting](http://scala.tomspark.tech/) during checkout — keeps everything in one place. You'll get a confirmation email (may take a few minutes).
+- **Or** buy one from [Namecheap](https://www.namecheap.com), [Porkbun](https://porkbun.com), or [Cloudflare Domains](https://www.cloudflare.com/products/registrar/) — usually ~$10/year for a `.com`
+
+Then go to your DNS settings and **create an A record** pointing to your Scala VPS IP address:
 
 | Type | Name | Value |
 |------|------|-------|
