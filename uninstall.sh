@@ -12,7 +12,7 @@ NC='\033[0m'
 # Detect OS family
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-    if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+    if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
         OS_FAMILY="rhel"
     else
         OS_FAMILY="debian"

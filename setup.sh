@@ -22,7 +22,7 @@ NC='\033[0m'
 if [ -z "${OS_FAMILY:-}" ]; then
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+        if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
             OS_FAMILY="rhel"
         else
             OS_FAMILY="debian"
@@ -278,6 +278,10 @@ if ! pkg_update; then
 fi
 
 if [ "$OS_FAMILY" = "rhel" ]; then
+    # EPEL is required for certbot on RHEL/Rocky/CentOS
+    if ! pkg_install epel-release; then
+        fail "Could not install EPEL repository. Try: dnf install -y epel-release"
+    fi
     if ! pkg_install curl wget openssl certbot firewalld; then
         fail "Package install failed. Try running: dnf install -y curl wget openssl certbot firewalld"
     fi
@@ -287,7 +291,7 @@ else
     fi
 fi
 
-# Docker
+# Docker (get.docker.com also installs the compose plugin)
 if ! command -v docker &>/dev/null; then
     if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
         fail "Docker installation failed. Try manually: https://docs.docker.com/engine/install/"
@@ -296,8 +300,13 @@ fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
-    if ! pkg_install docker-compose-plugin; then
-        fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
+    # On Debian, the plugin can be installed separately; on RHEL get.docker.com handles it
+    if [ "$OS_FAMILY" = "debian" ]; then
+        if ! pkg_install docker-compose-plugin; then
+            fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
+        fi
+    else
+        fail "Docker Compose plugin missing. Try reinstalling Docker: curl -fsSL https://get.docker.com | sh"
     fi
 fi
 
@@ -309,11 +318,11 @@ step "Generating encryption keys and passwords..."
 
 # On re-run, preserve existing secrets to avoid breaking the database
 if [ -f "$INSTALL_DIR/.env" ]; then
-    POSTGRES_PASSWORD=$(grep "^POSTGRES_PASSWORD=" "$INSTALL_DIR/.env" | cut -d= -f2)
-    REGISTRATION_SHARED_SECRET=$(grep "^SYNAPSE_REGISTRATION_SHARED_SECRET=" "$INSTALL_DIR/.env" | cut -d= -f2)
-    MACAROON_SECRET_KEY=$(grep "^SYNAPSE_MACAROON_SECRET_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2)
-    FORM_SECRET=$(grep "^SYNAPSE_FORM_SECRET=" "$INSTALL_DIR/.env" | cut -d= -f2)
-    TURN_SHARED_SECRET=$(grep "^TURN_SHARED_SECRET=" "$INSTALL_DIR/.env" | cut -d= -f2)
+    POSTGRES_PASSWORD=$(grep "^POSTGRES_PASSWORD=" "$INSTALL_DIR/.env" | cut -d= -f2-)
+    REGISTRATION_SHARED_SECRET=$(grep "^SYNAPSE_REGISTRATION_SHARED_SECRET=" "$INSTALL_DIR/.env" | cut -d= -f2-)
+    MACAROON_SECRET_KEY=$(grep "^SYNAPSE_MACAROON_SECRET_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-)
+    FORM_SECRET=$(grep "^SYNAPSE_FORM_SECRET=" "$INSTALL_DIR/.env" | cut -d= -f2-)
+    TURN_SHARED_SECRET=$(grep "^TURN_SHARED_SECRET=" "$INSTALL_DIR/.env" | cut -d= -f2-)
 fi
 
 # Generate any missing secrets (first run or incomplete .env)
@@ -370,20 +379,17 @@ step "Setting up Synapse, Element, Nginx, and Coturn configs..."
 template "$INSTALL_DIR/templates/homeserver.yaml.template" "$DATA_DIR/synapse/homeserver.yaml"
 
 # Add bridge registration lines if enabled
-BRIDGE_LINES=""
-if [ "$ENABLE_DISCORD" = true ]; then
-    BRIDGE_LINES="${BRIDGE_LINES}app_service_config_files:\n"
-    BRIDGE_LINES="${BRIDGE_LINES}  - /data/discord-registration.yaml\n"
-    if [ "$ENABLE_TELEGRAM" = true ]; then
-        BRIDGE_LINES="${BRIDGE_LINES}  - /data/telegram-registration.yaml\n"
-    fi
-elif [ "$ENABLE_TELEGRAM" = true ]; then
-    BRIDGE_LINES="app_service_config_files:\n"
-    BRIDGE_LINES="${BRIDGE_LINES}  - /data/telegram-registration.yaml\n"
-fi
-
-if [ -n "$BRIDGE_LINES" ]; then
-    sed -i "s|# __BRIDGE_REGISTRATIONS__|${BRIDGE_LINES}|" "$DATA_DIR/synapse/homeserver.yaml"
+if [ "$ENABLE_DISCORD" = true ] || [ "$ENABLE_TELEGRAM" = true ]; then
+    {
+        echo "app_service_config_files:"
+        [ "$ENABLE_DISCORD" = true ] && echo "  - /data/discord-registration.yaml"
+        [ "$ENABLE_TELEGRAM" = true ] && echo "  - /data/telegram-registration.yaml"
+    } > /tmp/_bridge_reg.txt
+    sed -i '/# __BRIDGE_REGISTRATIONS__/{
+        r /tmp/_bridge_reg.txt
+        d
+    }' "$DATA_DIR/synapse/homeserver.yaml"
+    rm -f /tmp/_bridge_reg.txt
 else
     sed -i "/# __BRIDGE_REGISTRATIONS__/d" "$DATA_DIR/synapse/homeserver.yaml"
 fi
@@ -724,7 +730,7 @@ else
     fi
 fi
 
-# Docker
+# Docker (get.docker.com also installs the compose plugin)
 if ! command -v docker &>/dev/null; then
     if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
         fail "Docker installation failed. Try manually: https://docs.docker.com/engine/install/"
@@ -733,8 +739,12 @@ fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
-    if ! pkg_install docker-compose-plugin; then
-        fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
+    if [ "$OS_FAMILY" = "debian" ]; then
+        if ! pkg_install docker-compose-plugin; then
+            fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
+        fi
+    else
+        fail "Docker Compose plugin missing. Try reinstalling Docker: curl -fsSL https://get.docker.com | sh"
     fi
 fi
 
@@ -746,9 +756,9 @@ step "Generating encryption keys..."
 
 # On re-run, preserve existing secrets
 if [ -f "$INSTALL_DIR/.env" ]; then
-    VAPID_PRIVATE_KEY=$(grep "^VAPID_PRIVATE_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
-    VAPID_PUBLIC_KEY=$(grep "^VAPID_PUBLIC_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
-    FILE_ENCRYPTION_KEY=$(grep "^FILE_ENCRYPTION_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
+    VAPID_PRIVATE_KEY=$(grep "^VAPID_PRIVATE_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    VAPID_PUBLIC_KEY=$(grep "^VAPID_PUBLIC_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    FILE_ENCRYPTION_KEY=$(grep "^FILE_ENCRYPTION_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
 fi
 
 # Generate VAPID keys if missing

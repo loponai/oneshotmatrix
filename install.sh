@@ -8,6 +8,7 @@ INSTALL_DIR="/opt/matrix-discord-killer"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo ""
@@ -33,7 +34,7 @@ fi
 . /etc/os-release
 if [[ "$ID" == "ubuntu" || "$ID" == "debian" || "${ID_LIKE:-}" == *"debian"* || "${ID_LIKE:-}" == *"ubuntu"* ]]; then
     export OS_FAMILY="debian"
-elif [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+elif [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
     export OS_FAMILY="rhel"
 else
     echo -e "${RED}Error: Unsupported OS. Supported: Ubuntu, Debian, Rocky Linux, RHEL, CentOS. Detected: $ID${NC}"
@@ -46,9 +47,9 @@ echo -e "${GREEN}Detected:${NC} ${PRETTY_NAME:-$ID} (${OS_FAMILY})"
 if ! command -v git &>/dev/null; then
     echo -n "Installing git... "
     if [ "$OS_FAMILY" = "rhel" ]; then
-        dnf install -y -q git 2>&1 || { echo -e "${RED}FAILED${NC}"; echo "Run manually: dnf install -y git"; exit 1; }
+        dnf install -y -q git >/dev/null 2>&1 || { echo -e "${RED}FAILED${NC}"; echo "Run manually: dnf install -y git"; exit 1; }
     else
-        apt-get update -qq && apt-get install -y -qq git 2>&1 || { echo -e "${RED}FAILED${NC}"; echo "Run manually: apt-get install -y git"; exit 1; }
+        apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq git >/dev/null 2>&1 || { echo -e "${RED}FAILED${NC}"; echo "Run manually: apt-get install -y git"; exit 1; }
     fi
     echo -e "${GREEN}done${NC}"
 fi
@@ -64,11 +65,19 @@ if [ -d "$INSTALL_DIR/.git" ]; then
 elif [ -d "$INSTALL_DIR" ]; then
     echo "Existing directory found but not a git repo — removing and re-downloading..."
     rm -rf "$INSTALL_DIR"
-    git clone -q "$REPO_URL" "$INSTALL_DIR" 2>&1
+    if ! git clone -q "$REPO_URL" "$INSTALL_DIR" >/dev/null 2>&1; then
+        echo -e "${RED}FAILED${NC}"
+        echo "Could not download installer. Check internet connectivity."
+        exit 1
+    fi
     echo -e "${GREEN}done${NC}"
 else
     echo -n "Downloading installer files... "
-    git clone -q "$REPO_URL" "$INSTALL_DIR" 2>&1
+    if ! git clone -q "$REPO_URL" "$INSTALL_DIR" >/dev/null 2>&1; then
+        echo -e "${RED}FAILED${NC}"
+        echo "Could not download installer. Check internet connectivity."
+        exit 1
+    fi
     echo -e "${GREEN}done${NC}"
 fi
 
