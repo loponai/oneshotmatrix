@@ -18,6 +18,20 @@ NC='\033[0m'
 
 # ─── Helpers ─────────────────────────────────────────────────────────
 
+# OS detection (set by install.sh, fallback for standalone runs)
+if [ -z "${OS_FAMILY:-}" ]; then
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+            OS_FAMILY="rhel"
+        else
+            OS_FAMILY="debian"
+        fi
+    else
+        OS_FAMILY="debian"
+    fi
+fi
+
 step_count=0
 total_steps=11
 
@@ -54,6 +68,68 @@ template() {
         -e "s|__VAPID_PUBLIC_KEY__|${VAPID_PUBLIC_KEY:-}|g" \
         -e "s|__FILE_ENCRYPTION_KEY__|${FILE_ENCRYPTION_KEY:-}|g" \
         "$dst"
+}
+
+# ─── Package & firewall wrappers (Debian/RHEL) ──────────────────────
+
+pkg_update() {
+    if [ "$OS_FAMILY" = "debian" ]; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq >/dev/null 2>&1
+    fi
+    # dnf doesn't need a separate update step
+}
+
+pkg_install() {
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        dnf install -y -q "$@" >/dev/null 2>&1
+    else
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y -qq "$@" >/dev/null 2>&1
+    fi
+}
+
+detect_ssh_port() {
+    # Read the actual listening SSH port (handles Scala's port 6543)
+    local port
+    port=$(ss -tlnp 2>/dev/null | grep -E 'sshd|"ssh"' | awk '{print $4}' | grep -oE '[0-9]+$' | head -1)
+    echo "${port:-22}"
+}
+
+fw_allow() {
+    # Usage: fw_allow 80/tcp  OR  fw_allow 49152:49200/udp
+    local rule="$1"
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        firewall-cmd --permanent --zone=public --add-port="$rule" >/dev/null 2>&1 || true
+    else
+        ufw allow "$rule" >/dev/null 2>&1 || true
+    fi
+}
+
+fw_enable() {
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        systemctl enable --now firewalld >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    else
+        ufw --force enable >/dev/null 2>&1 || true
+    fi
+}
+
+fw_delete() {
+    # Usage: fw_delete 80/tcp
+    local rule="$1"
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        firewall-cmd --permanent --zone=public --remove-port="$rule" >/dev/null 2>&1 || true
+    else
+        ufw delete allow "$rule" >/dev/null 2>&1 || true
+    fi
+}
+
+fw_reload() {
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    fi
+    # ufw applies changes immediately, no reload needed
 }
 
 # ─── Pre-flight ──────────────────────────────────────────────────────
@@ -181,12 +257,18 @@ if [ "$PLATFORM" = "matrix" ]; then
 
 step "Installing system dependencies..."
 
-export DEBIAN_FRONTEND=noninteractive
-if ! apt-get update -qq >/dev/null 2>&1; then
-    fail "apt-get update failed. Check your internet connection and package sources."
+if ! pkg_update; then
+    fail "Package update failed. Check your internet connection and package sources."
 fi
-if ! apt-get install -y -qq curl wget openssl certbot ufw >/dev/null 2>&1; then
-    fail "Failed to install system packages (curl, openssl, certbot, ufw)."
+
+if [ "$OS_FAMILY" = "rhel" ]; then
+    if ! pkg_install curl wget openssl certbot firewalld; then
+        fail "Failed to install system packages."
+    fi
+else
+    if ! pkg_install curl wget openssl certbot ufw; then
+        fail "Failed to install system packages."
+    fi
 fi
 
 # Docker
@@ -198,7 +280,7 @@ fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
-    if ! apt-get install -y -qq docker-compose-plugin >/dev/null 2>&1; then
+    if ! pkg_install docker-compose-plugin; then
         fail "Docker Compose plugin installation failed."
     fi
 fi
@@ -366,16 +448,17 @@ ok
 step "Configuring firewall..."
 
 # Preserve SSH access before enabling firewall
-ufw allow 22/tcp >/dev/null 2>&1
-ufw allow 80/tcp >/dev/null 2>&1
-ufw allow 443/tcp >/dev/null 2>&1
-ufw allow 8448/tcp >/dev/null 2>&1
-ufw allow 3478/tcp >/dev/null 2>&1
-ufw allow 3478/udp >/dev/null 2>&1
-ufw allow 5349/tcp >/dev/null 2>&1
-ufw allow 5349/udp >/dev/null 2>&1
-ufw allow 49152:49200/udp >/dev/null 2>&1
-ufw --force enable >/dev/null 2>&1 || true
+SSH_PORT=$(detect_ssh_port)
+fw_allow "${SSH_PORT}/tcp"
+fw_allow 80/tcp
+fw_allow 443/tcp
+fw_allow 8448/tcp
+fw_allow 3478/tcp
+fw_allow 3478/udp
+fw_allow 5349/tcp
+fw_allow 5349/udp
+fw_allow 49152:49200/udp
+fw_enable
 
 ok
 
@@ -599,12 +682,18 @@ else
 
 step "Installing system dependencies..."
 
-export DEBIAN_FRONTEND=noninteractive
-if ! apt-get update -qq >/dev/null 2>&1; then
-    fail "apt-get update failed. Check your internet connection and package sources."
+if ! pkg_update; then
+    fail "Package update failed. Check your internet connection and package sources."
 fi
-if ! apt-get install -y -qq curl openssl ufw >/dev/null 2>&1; then
-    fail "Failed to install system packages (curl, openssl, ufw)."
+
+if [ "$OS_FAMILY" = "rhel" ]; then
+    if ! pkg_install curl openssl firewalld; then
+        fail "Failed to install system packages."
+    fi
+else
+    if ! pkg_install curl openssl ufw; then
+        fail "Failed to install system packages."
+    fi
 fi
 
 # Docker
@@ -616,7 +705,7 @@ fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
-    if ! apt-get install -y -qq docker-compose-plugin >/dev/null 2>&1; then
+    if ! pkg_install docker-compose-plugin; then
         fail "Docker Compose plugin installation failed."
     fi
 fi
@@ -692,10 +781,11 @@ ok
 
 step "Configuring firewall..."
 
-ufw allow 22/tcp >/dev/null 2>&1
-ufw allow 80/tcp >/dev/null 2>&1
-ufw allow 443/tcp >/dev/null 2>&1
-ufw --force enable >/dev/null 2>&1 || true
+SSH_PORT=$(detect_ssh_port)
+fw_allow "${SSH_PORT}/tcp"
+fw_allow 80/tcp
+fw_allow 443/tcp
+fw_enable
 
 ok
 

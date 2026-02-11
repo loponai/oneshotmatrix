@@ -16,7 +16,7 @@ We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-man
 
 1. Go to [Scala Hosting Self-Managed VPS](http://scala.tomspark.tech/)
 2. Pick **Build #1** (2 cores, 4GB RAM, 50GB NVMe) — $19.95/mo, plenty for a personal/small-community server
-3. Choose **Ubuntu** as the operating system
+3. Choose **Ubuntu** or **Rocky Linux** as the operating system (Rocky is the default if SPanel is included)
 4. Complete checkout and wait for your welcome email with your server IP and root password
 
 ### Step 2: Get a domain and point it to your server
@@ -170,9 +170,9 @@ docker compose logs            # All logs
 docker compose logs synapse    # Single service
 ```
 
-**Federation not working?** Check DNS (`dig A yourdomain.com`), test at https://federationtester.matrix.org, verify port 8448 is open (`ufw status`).
+**Federation not working?** Check DNS (`dig A yourdomain.com`), test at https://federationtester.matrix.org, verify port 8448 is open (`ufw status` on Ubuntu/Debian, `firewall-cmd --list-ports` on Rocky Linux).
 
-**Voice/video failing?** Check `docker compose logs coturn`, verify TURN ports open (`ufw status`), test in Element under Settings > Voice & Video.
+**Voice/video failing?** Check `docker compose logs coturn`, verify TURN ports open (`ufw status` or `firewall-cmd --list-ports`), test in Element under Settings > Voice & Video.
 
 **SSL issues?**
 ```bash
@@ -200,7 +200,7 @@ Permanently destroys all data including messages, accounts, and media.
 
 ### Requirements
 
-- **Ubuntu 22.04+** or **Debian 12+** VPS with full root access (4GB RAM recommended)
+- **Ubuntu 22.04+**, **Debian 12+**, or **Rocky Linux 8+** VPS with full root access (4GB RAM recommended)
 - A domain name with DNS pointed to your server
 - Ports 80/443 free (disable SPanel's web server first — see Step 3)
 

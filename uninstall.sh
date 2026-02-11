@@ -9,6 +9,33 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Detect OS family
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+        OS_FAMILY="rhel"
+    else
+        OS_FAMILY="debian"
+    fi
+else
+    OS_FAMILY="debian"
+fi
+
+fw_delete() {
+    local rule="$1"
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        firewall-cmd --permanent --zone=public --remove-port="$rule" >/dev/null 2>&1 || true
+    else
+        ufw delete allow "$rule" >/dev/null 2>&1 || true
+    fi
+}
+
+fw_reload() {
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    fi
+}
+
 echo ""
 echo -e "${RED}  ╔══════════════════════════════════════════╗${NC}"
 echo -e "${RED}  ║   matrix-discord-killer UNINSTALLER      ║${NC}"
@@ -39,7 +66,7 @@ else
     echo "  - SSL certificates"
     echo "  - Coturn configuration"
 fi
-echo "  - UFW firewall rules added by the installer"
+echo "  - Firewall rules added by the installer"
 echo ""
 read -rp "Type 'DELETE EVERYTHING' to confirm: " confirm
 
@@ -68,12 +95,11 @@ if [ "$PLATFORM" = "stoat" ]; then
     echo "[3/4] No SSL certificates to remove (Caddy auto-manages)..."
     echo -e "       ${GREEN}[OK]${NC}"
 
-    # Remove UFW rules (Stoat only uses 80/443)
+    # Remove firewall rules (Stoat only uses 80/443)
     echo "[4/4] Removing firewall rules..."
-    if command -v ufw &>/dev/null; then
-        ufw delete allow 80/tcp 2>/dev/null || true
-        ufw delete allow 443/tcp 2>/dev/null || true
-    fi
+    fw_delete 80/tcp
+    fw_delete 443/tcp
+    fw_reload
     echo -e "       ${GREEN}[OK]${NC}"
 else
     if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
@@ -100,18 +126,17 @@ else
     crontab -l 2>/dev/null | grep -v "matrix-discord-killer" | crontab - 2>/dev/null || true
     echo -e "       ${GREEN}[OK]${NC}"
 
-    # Remove UFW rules
+    # Remove firewall rules
     echo "[4/5] Removing firewall rules..."
-    if command -v ufw &>/dev/null; then
-        ufw delete allow 80/tcp 2>/dev/null || true
-        ufw delete allow 443/tcp 2>/dev/null || true
-        ufw delete allow 8448/tcp 2>/dev/null || true
-        ufw delete allow 3478/tcp 2>/dev/null || true
-        ufw delete allow 3478/udp 2>/dev/null || true
-        ufw delete allow 5349/tcp 2>/dev/null || true
-        ufw delete allow 5349/udp 2>/dev/null || true
-        ufw delete allow 49152:49200/udp 2>/dev/null || true
-    fi
+    fw_delete 80/tcp
+    fw_delete 443/tcp
+    fw_delete 8448/tcp
+    fw_delete 3478/tcp
+    fw_delete 3478/udp
+    fw_delete 5349/tcp
+    fw_delete 5349/udp
+    fw_delete 49152:49200/udp
+    fw_reload
     echo -e "       ${GREEN}[OK]${NC}"
 
     # Remove install directory (Matrix has extra step)

@@ -26,17 +26,21 @@ fi
 
 # Detect OS
 if [ ! -f /etc/os-release ]; then
-    echo -e "${RED}Error: Cannot detect OS. Only Ubuntu/Debian are supported.${NC}"
+    echo -e "${RED}Error: Cannot detect OS (missing /etc/os-release).${NC}"
     exit 1
 fi
 
 . /etc/os-release
-if [[ "$ID" != "ubuntu" && "$ID" != "debian" && "${ID_LIKE:-}" != *"debian"* && "${ID_LIKE:-}" != *"ubuntu"* ]]; then
-    echo -e "${RED}Error: Only Ubuntu/Debian (or derivatives) are supported. Detected: $ID${NC}"
+if [[ "$ID" == "ubuntu" || "$ID" == "debian" || "${ID_LIKE:-}" == *"debian"* || "${ID_LIKE:-}" == *"ubuntu"* ]]; then
+    export OS_FAMILY="debian"
+elif [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+    export OS_FAMILY="rhel"
+else
+    echo -e "${RED}Error: Unsupported OS. Supported: Ubuntu, Debian, Rocky Linux, RHEL, CentOS. Detected: $ID${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}Detected:${NC} ${PRETTY_NAME:-$ID}"
+echo -e "${GREEN}Detected:${NC} ${PRETTY_NAME:-$ID} (${OS_FAMILY})"
 
 # Reopen stdin for interactive prompts (curl pipes eat stdin)
 if [ -t 0 ] || [ -e /dev/tty ]; then
@@ -46,7 +50,11 @@ fi
 # Install git if missing
 if ! command -v git &>/dev/null; then
     echo "Installing git..."
-    apt-get update -qq && apt-get install -y -qq git >/dev/null 2>&1
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        dnf install -y -q git >/dev/null 2>&1
+    else
+        apt-get update -qq && apt-get install -y -qq git >/dev/null 2>&1
+    fi
 fi
 
 # Clone or update repo
