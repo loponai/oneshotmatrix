@@ -19,15 +19,21 @@ We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-man
 3. Choose **Ubuntu** as the operating system
 4. Complete checkout and wait for your welcome email with your server IP and root password
 
-### Step 2: Point your domain
+### Step 2: Get a domain and point it to your server
 
-Create a DNS **A record** pointing to your server IP. You can do this in Cloudflare, Namecheap, or wherever you manage DNS:
+You need a domain name (like `chat.example.com`) that points to your VPS. If you don't already have one:
+
+1. **Buy a domain** from a registrar like [Namecheap](https://www.namecheap.com), [Porkbun](https://porkbun.com), or [Cloudflare Domains](https://www.cloudflare.com/products/registrar/) — usually ~$10/year for a `.com`
+2. **Go to your registrar's DNS settings** (or Cloudflare if you use it for DNS)
+3. **Create an A record** pointing to your Scala VPS IP address:
 
 | Type | Name | Value |
 |------|------|-------|
 | A | chat.example.com | YOUR_SERVER_IP |
 
-Wait 5-15 minutes for DNS to propagate.
+Your server IP is in the welcome email from Scala. If you want to use a subdomain like `chat.example.com`, put `chat` in the Name field. If you want the whole domain (like `example.com`), put `@`.
+
+Wait 5-15 minutes for DNS to propagate before moving on.
 
 > **Cloudflare users:** Set the proxy to **DNS only** (grey cloud). Cloudflare doesn't support port 8448 (Matrix federation) and can interfere with SSL certificate generation.
 
