@@ -887,13 +887,13 @@ ok
 step "Waiting for Stoat to come online..."
 
 echo -n "  Checking API..."
-for i in $(seq 1 60); do
-    if curl -sf "http://localhost:14702/" >/dev/null 2>&1; then
+for i in $(seq 1 90); do
+    if docker compose exec -T api curl -sf http://localhost:14702/ >/dev/null 2>&1; then
         break
     fi
-    if [ "$i" -eq 60 ]; then
+    if [ "$i" -eq 90 ]; then
         echo ""
-        echo -e "${RED}Stoat API didn't start within 2 minutes.${NC}"
+        echo -e "${RED}Stoat API didn't start within 3 minutes.${NC}"
         echo "Run 'cd $INSTALL_DIR && docker compose logs api' to see the error."
         exit 1
     fi
