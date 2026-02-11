@@ -14,9 +14,9 @@ We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-man
 
 ### Step 1: Get a VPS
 
-1. Go to [Scala Hosting Self-Managed VPS](http://scala.tomspark.tech/)
+1. Go to [Scala Hosting Self-Managed VPS](http://scala.tomspark.tech/) — make sure you're on the **Self-Managed** (unmanaged) plans, not the Managed ones
 2. Pick **Build #1** (2 cores, 4GB RAM, 50GB NVMe) — $19.95/mo, plenty for a personal/small-community server
-3. Choose **Ubuntu** or **Rocky Linux** as the operating system (Rocky is the default if SPanel is included)
+3. Under **OS**, select **Rocky Linux 10** (the one **without** SPanel) — this gives you a clean server with nothing to disable later. If you accidentally picked "Rocky Linux 10 with SPanel", see Step 3 to disable it
 4. Complete checkout and wait for your welcome email with your server IP and root password
 
 ### Step 2: Get a domain and point it to your server
@@ -45,7 +45,7 @@ You need a domain name that points to your VPS IP address. You can register one 
 
 If you don't want to use Cloudflare, you can create the A record in whatever registrar you bought the domain from (Namecheap, Porkbun, etc.) — just make sure you're **not** using the VPS as your nameserver.
 
-### Step 3: SSH in and disable SPanel
+### Step 3: SSH in (and disable SPanel if needed)
 
 SSH is how you remotely control your server from a terminal. You type commands on your computer and they run on the VPS.
 
@@ -67,7 +67,11 @@ Replace `YOUR_SERVER_IP` with the IP from your Scala welcome email (e.g. `ssh ro
 - Enter the **root password** from your Scala welcome email
   - **The screen will stay completely blank as you type or paste** — no dots, no stars, nothing. This is normal! Just paste your password and press Enter. It's there, you just can't see it.
 
-Once you're in, you'll see a command prompt on your server. Now disable SPanel's web server so our installer can use ports 80/443:
+Once you're in, you'll see a command prompt on your server.
+
+**If you picked "Rocky Linux 10" (without SPanel) in Step 1**, you're good — skip straight to Step 4.
+
+**If you picked "Rocky Linux 10 with SPanel"**, disable SPanel's web server so our installer can use ports 80/443:
 
 ```bash
 systemctl mask --now httpd
@@ -551,9 +555,9 @@ Permanently destroys all data including messages, accounts, and media.
 
 ### Requirements
 
-- **Ubuntu 22.04+**, **Debian 12+**, or **Rocky Linux 8+** VPS with full root access (4GB RAM recommended)
+- **Ubuntu 22.04+**, **Debian 12+**, or **Rocky Linux 8+** on an unmanaged VPS with full root access (4GB RAM recommended)
 - A domain name with DNS pointed to your server
-- Ports 80/443 free (disable SPanel's web server first — see Step 3)
+- Ports 80/443 free (if SPanel is installed, disable it first — see Step 3)
 
 ### Architecture
 
@@ -600,7 +604,3 @@ Internet → Caddy (80/443)
 ├── templates/              # Config templates
 └── data/                   # All persistent data
 ```
-
-## License
-
-MIT
