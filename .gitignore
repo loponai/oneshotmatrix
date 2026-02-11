@@ -1,6 +1,9 @@
 # Environment and secrets
 .env
+.env.web
 credentials.txt
+Revolt.toml
+Caddyfile
 
 # Runtime data
 data/

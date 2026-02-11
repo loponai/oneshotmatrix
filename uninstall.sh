@@ -53,7 +53,7 @@ fi
 # Detect platform
 PLATFORM="matrix"
 if [ -f "$INSTALL_DIR/.env" ]; then
-    PLATFORM=$(grep "^PLATFORM=" "$INSTALL_DIR/.env" | cut -d= -f2) || true
+    PLATFORM=$(grep "^PLATFORM=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
     PLATFORM="${PLATFORM:-matrix}"
 fi
 
@@ -121,7 +121,7 @@ else
     echo "[3/5] Removing SSL certificates and renewal cron..."
     DOMAIN=""
     if [ -f "$INSTALL_DIR/.env" ]; then
-        DOMAIN=$(grep "^DOMAIN=" "$INSTALL_DIR/.env" | cut -d= -f2)
+        DOMAIN=$(grep "^DOMAIN=" "$INSTALL_DIR/.env" | cut -d= -f2-)
     fi
     if [ -n "$DOMAIN" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
         certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || true

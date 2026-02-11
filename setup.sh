@@ -71,6 +71,13 @@ template() {
         -e "s|__VAPID_PRIVATE_KEY__|${VAPID_PRIVATE_KEY:-}|g" \
         -e "s|__VAPID_PUBLIC_KEY__|${VAPID_PUBLIC_KEY:-}|g" \
         -e "s|__FILE_ENCRYPTION_KEY__|${FILE_ENCRYPTION_KEY:-}|g" \
+        -e "s|__MONGO_USER__|${MONGO_USER:-}|g" \
+        -e "s|__MONGO_PASSWORD__|${MONGO_PASSWORD:-}|g" \
+        -e "s|__RABBIT_USER__|${RABBIT_USER:-}|g" \
+        -e "s|__RABBIT_PASSWORD__|${RABBIT_PASSWORD:-}|g" \
+        -e "s|__MINIO_USER__|${MINIO_USER:-}|g" \
+        -e "s|__MINIO_PASSWORD__|${MINIO_PASSWORD:-}|g" \
+        -e "s|__REDIS_PASSWORD__|${REDIS_PASSWORD:-}|g" \
         "$dst"
 }
 
@@ -93,15 +100,17 @@ pkg_install() {
 }
 
 detect_ssh_port() {
-    # Detect SSH port: check sshd_config first, then running sshd via ss
+    # Detect SSH port: check sshd_config + drop-in configs, then running sshd via ss
     local port=""
-    # Primary: read from sshd config
-    if [ -f /etc/ssh/sshd_config ]; then
-        port=$(grep -iE '^\s*Port\s+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -1)
-    fi
+    # Primary: read from sshd config and drop-in files
+    for cfg in /etc/ssh/sshd_config.d/*.conf /etc/ssh/sshd_config; do
+        [ -f "$cfg" ] || continue
+        port=$(grep -iE '^\s*Port\s+' "$cfg" 2>/dev/null | awk '{print $2}' | head -1)
+        [ -n "$port" ] && break
+    done
     # Fallback: check what sshd is actually listening on
     if [ -z "$port" ]; then
-        port=$(ss -tlnp 2>/dev/null | grep '"sshd"' | awk '{print $4}' | rev | cut -d: -f1 | rev | head -1)
+        port=$(ss -tlnp 2>/dev/null | grep -E '"sshd"|sshd' | awk '{print $4}' | rev | cut -d: -f1 | rev | head -1)
     fi
     echo "${port:-22}"
 }
@@ -128,6 +137,8 @@ fw_enable() {
             return 0
         fi
         systemctl enable --now firewalld >/dev/null 2>&1 || true
+        # Ensure default-deny for incoming traffic
+        firewall-cmd --permanent --zone=public --set-target=DROP >/dev/null 2>&1 || true
         firewall-cmd --reload >/dev/null 2>&1 || true
     else
         if ! command -v ufw &>/dev/null; then
@@ -135,6 +146,7 @@ fw_enable() {
             echo -e "  ${YELLOW}You may need to open ports manually.${NC}"
             return 0
         fi
+        ufw default deny incoming >/dev/null 2>&1 || true
         ufw --force enable >/dev/null 2>&1 || true
     fi
 }
@@ -240,7 +252,7 @@ echo -e "  ${CYAN}Example: chat.example.com${NC}"
 echo ""
 while true; do
     read -rp "Your domain: " DOMAIN
-    if [[ "$DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; then
+    if [[ "$DOMAIN" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]] && [ ${#DOMAIN} -le 253 ]; then
         break
     fi
     echo -e "  ${RED}That doesn't look right. Enter a domain like: chat.example.com${NC}"
@@ -254,7 +266,7 @@ echo -e "  ${CYAN}This is only used for certificate expiry warnings — no spam.
 echo ""
 while true; do
     read -rp "Your email: " ACME_EMAIL
-    if [[ "$ACME_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+    if [[ "$ACME_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
         break
     fi
     echo -e "  ${RED}That doesn't look like an email address. Try again.${NC}"
@@ -264,15 +276,29 @@ done
 if [ "$PLATFORM" = "matrix" ]; then
     echo ""
     echo "Choose a password for the admin account (@admin on your server)."
-    echo -e "  ${CYAN}Must be at least 8 characters. You'll use this to log in.${NC}"
+    echo -e "  ${CYAN}Must be at least 8 characters with mixed character types.${NC}"
     echo ""
     while true; do
         read -rsp "Admin password (typing is hidden): " ADMIN_PASSWORD
         echo ""
-        if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
-            break
+        if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
+            echo -e "  ${RED}Too short — must be at least 8 characters. Try again.${NC}"
+            continue
         fi
-        echo -e "  ${RED}Too short — must be at least 8 characters. Try again.${NC}"
+        if [[ "$ADMIN_PASSWORD" =~ ^[0-9]+$ ]]; then
+            echo -e "  ${RED}Password cannot be all digits. Try again.${NC}"
+            continue
+        fi
+        if [[ "$ADMIN_PASSWORD" == -* ]]; then
+            echo -e "  ${RED}Password cannot start with a dash. Try again.${NC}"
+            continue
+        fi
+        # Check it's not a single repeated character (e.g. "aaaaaaaa")
+        if [[ "$ADMIN_PASSWORD" =~ ^(.)\1*$ ]]; then
+            echo -e "  ${RED}Password cannot be a single repeated character. Try again.${NC}"
+            continue
+        fi
+        break
     done
 
     # Bridges
@@ -420,16 +446,17 @@ template "$INSTALL_DIR/templates/homeserver.yaml.template" "$DATA_DIR/synapse/ho
 
 # Add bridge registration lines if enabled
 if [ "$ENABLE_DISCORD" = true ] || [ "$ENABLE_TELEGRAM" = true ]; then
+    BRIDGE_TMP=$(mktemp)
     {
         echo "app_service_config_files:"
         [ "$ENABLE_DISCORD" = true ] && echo "  - /data/discord-registration.yaml"
         [ "$ENABLE_TELEGRAM" = true ] && echo "  - /data/telegram-registration.yaml"
-    } > /tmp/_bridge_reg.txt
+    } > "$BRIDGE_TMP"
     sed -i '/# __BRIDGE_REGISTRATIONS__/{
-        r /tmp/_bridge_reg.txt
+        r '"$BRIDGE_TMP"'
         d
     }' "$DATA_DIR/synapse/homeserver.yaml"
-    rm -f /tmp/_bridge_reg.txt
+    rm -f "$BRIDGE_TMP"
 else
     sed -i "/# __BRIDGE_REGISTRATIONS__/d" "$DATA_DIR/synapse/homeserver.yaml"
 fi
@@ -560,9 +587,10 @@ if [ "$ENABLE_DISCORD" = true ]; then
             dock.mau.dev/mautrix/discord:latest 2>/dev/null || true
     fi
 
-    # Copy registration to synapse data dir
+    # Copy registration to synapse data dir (restrict perms — contains appservice tokens)
     if [ -f "$DATA_DIR/mautrix-discord/registration.yaml" ]; then
         cp "$DATA_DIR/mautrix-discord/registration.yaml" "$DATA_DIR/synapse/discord-registration.yaml"
+        chmod 600 "$DATA_DIR/synapse/discord-registration.yaml"
     fi
 fi
 
@@ -593,6 +621,7 @@ if [ "$ENABLE_TELEGRAM" = true ]; then
 
     if [ -f "$DATA_DIR/mautrix-telegram/registration.yaml" ]; then
         cp "$DATA_DIR/mautrix-telegram/registration.yaml" "$DATA_DIR/synapse/telegram-registration.yaml"
+        chmod 600 "$DATA_DIR/synapse/telegram-registration.yaml"
     fi
 fi
 
@@ -625,16 +654,16 @@ step "Starting all services (first run downloads Docker images — may take a fe
 cd "$INSTALL_DIR"
 
 # Build compose profiles argument
-PROFILES=""
+PROFILES=()
 if [ "$ENABLE_DISCORD" = true ]; then
-    PROFILES="$PROFILES --profile discord-bridge"
+    PROFILES+=(--profile discord-bridge)
 fi
 if [ "$ENABLE_TELEGRAM" = true ]; then
-    PROFILES="$PROFILES --profile telegram-bridge"
+    PROFILES+=(--profile telegram-bridge)
 fi
 
 COMPOSE_EXIT=0
-docker compose $PROFILES up -d 2>&1 || COMPOSE_EXIT=$?
+docker compose "${PROFILES[@]}" up -d 2>&1 || COMPOSE_EXIT=$?
 if [ "$COMPOSE_EXIT" -ne 0 ]; then
     fail "Docker failed to start. Run 'cd $INSTALL_DIR && docker compose logs' to see what went wrong."
 fi
@@ -683,7 +712,7 @@ fi
 
 # Certbot cron for renewal (webroot mode using nginx)
 # Add cert renewal cron if not already present
-CRON_LINE="0 3 * * * certbot renew --deploy-hook 'cd $INSTALL_DIR && docker compose exec -T nginx nginx -s reload && docker compose restart coturn' --quiet # matrix-discord-killer"
+CRON_LINE="0 3 * * * certbot renew --deploy-hook 'cd $INSTALL_DIR && docker compose exec -T nginx nginx -s reload && docker compose restart coturn' # matrix-discord-killer"
 (crontab -l 2>/dev/null | grep -v "# matrix-discord-killer" || true; echo "$CRON_LINE") | crontab -
 
 # ─── Save credentials ───────────────────────────────────────────────
@@ -797,6 +826,13 @@ if [ -f "$INSTALL_DIR/.env" ]; then
     VAPID_PRIVATE_KEY=$(grep "^VAPID_PRIVATE_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
     VAPID_PUBLIC_KEY=$(grep "^VAPID_PUBLIC_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
     FILE_ENCRYPTION_KEY=$(grep "^FILE_ENCRYPTION_KEY=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    MONGO_USER=$(grep "^MONGO_USER=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    MONGO_PASSWORD=$(grep "^MONGO_PASSWORD=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    RABBIT_USER=$(grep "^RABBIT_USER=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    RABBIT_PASSWORD=$(grep "^RABBIT_PASSWORD=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    MINIO_USER=$(grep "^MINIO_USER=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    MINIO_PASSWORD=$(grep "^MINIO_PASSWORD=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
+    REDIS_PASSWORD=$(grep "^REDIS_PASSWORD=" "$INSTALL_DIR/.env" | cut -d= -f2-) || true
 fi
 
 # Generate VAPID keys if missing
@@ -809,6 +845,15 @@ if [ -z "${VAPID_PRIVATE_KEY:-}" ] || [ -z "${VAPID_PUBLIC_KEY:-}" ]; then
 fi
 
 FILE_ENCRYPTION_KEY="${FILE_ENCRYPTION_KEY:-$(openssl rand -base64 32)}"
+
+# Service credentials (random per-install, not world-known)
+MONGO_USER="${MONGO_USER:-revolt}"
+MONGO_PASSWORD="${MONGO_PASSWORD:-$(generate_secret)}"
+RABBIT_USER="${RABBIT_USER:-rabbituser}"
+RABBIT_PASSWORD="${RABBIT_PASSWORD:-$(generate_secret)}"
+MINIO_USER="${MINIO_USER:-minioautumn}"
+MINIO_PASSWORD="${MINIO_PASSWORD:-$(generate_secret)}"
+REDIS_PASSWORD="${REDIS_PASSWORD:-$(generate_secret)}"
 
 ok
 
@@ -838,11 +883,18 @@ ACME_EMAIL=$ACME_EMAIL
 VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY
 VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY
 FILE_ENCRYPTION_KEY=$FILE_ENCRYPTION_KEY
+MONGO_USER=$MONGO_USER
+MONGO_PASSWORD=$MONGO_PASSWORD
+RABBIT_USER=$RABBIT_USER
+RABBIT_PASSWORD=$RABBIT_PASSWORD
+MINIO_USER=$MINIO_USER
+MINIO_PASSWORD=$MINIO_PASSWORD
+REDIS_PASSWORD=$REDIS_PASSWORD
 ENVEOF
 
 chmod 600 "$INSTALL_DIR/.env"
 
-# Revolt.toml
+# Revolt.toml (644 required — containers run as non-root and need read access via bind mount)
 template "$INSTALL_DIR/templates/revolt.toml.template" "$INSTALL_DIR/Revolt.toml"
 chmod 644 "$INSTALL_DIR/Revolt.toml"
 
@@ -934,8 +986,13 @@ echo ""
 echo -e "${BOLD}  What to do now:${NC}"
 echo ""
 echo -e "  1. Open ${CYAN}https://${DOMAIN}${NC} in your browser"
-echo -e "  2. Click ${BOLD}Register${NC} to create your account"
+echo -e "  2. Click ${BOLD}Register${NC} to create your account ${RED}immediately${NC}"
 echo -e "     ${YELLOW}Important:${NC} The first account you create becomes the server owner!"
+echo ""
+echo -e "  ${RED}⚠ SECURITY:${NC} Registration is open to anyone who visits your domain."
+echo -e "  Register your account NOW before anyone else does. Then lock it down:"
+echo -e "     ${CYAN}nano $INSTALL_DIR/Revolt.toml${NC}  →  add: ${BOLD}invite_only = true${NC}"
+echo -e "     ${CYAN}cd $INSTALL_DIR && docker compose restart api${NC}"
 echo ""
 echo -e "  ${YELLOW}Note:${NC} If you see an \"API error\" when the page loads, wait 30 seconds"
 echo -e "  and refresh — the services are still starting up behind the scenes."
@@ -945,7 +1002,7 @@ echo -e "  Revolt before a rebrand in late 2025. The web client hasn't been upda
 echo -e "  with the new name yet. Same software, same team."
 echo ""
 echo -e "  ${BOLD}Invite friends:${NC} Share the link ${CYAN}https://${DOMAIN}${NC}"
-echo -e "                  They can register themselves."
+echo -e "                  They can register themselves (unless invite_only is enabled)."
 echo ""
 echo -e "  ${BOLD}Saved to:${NC}  $CRED_FILE"
 echo ""

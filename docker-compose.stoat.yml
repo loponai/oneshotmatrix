@@ -2,10 +2,13 @@ services:
   database:
     image: mongo:latest
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-revolt}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     volumes:
       - ./data/db:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok", "--quiet"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand('ping').ok\" \"mongodb://$${MONGO_INITDB_ROOT_USERNAME}:$${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/?authSource=admin\""]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -16,6 +19,7 @@ services:
   redis:
     image: eqalpha/keydb:latest
     restart: unless-stopped
+    command: keydb-server --requirepass ${REDIS_PASSWORD}
     networks:
       - stoat
 
@@ -23,8 +27,8 @@ services:
     image: rabbitmq:4
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: rabbituser
-      RABBITMQ_DEFAULT_PASS: rabbitpass
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-rabbituser}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
     volumes:
       - ./data/rabbit:/var/lib/rabbitmq
     healthcheck:
@@ -43,8 +47,8 @@ services:
     volumes:
       - ./data/minio:/data
     environment:
-      MINIO_ROOT_USER: minioautumn
-      MINIO_ROOT_PASSWORD: minioautumn
+      MINIO_ROOT_USER: ${MINIO_USER:-minioautumn}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
       MINIO_DOMAIN: minio
     networks:
       stoat:
@@ -61,10 +65,13 @@ services:
     image: minio/mc:latest
     depends_on:
       - minio
+    environment:
+      MINIO_USER: ${MINIO_USER:-minioautumn}
+      MINIO_PASSWORD: ${MINIO_PASSWORD}
     entrypoint: >
       /bin/sh -c "
       while ! /usr/bin/mc ready minio; do
-        /usr/bin/mc alias set minio http://minio:9000 minioautumn minioautumn;
+        /usr/bin/mc alias set minio http://minio:9000 $$MINIO_USER $$MINIO_PASSWORD;
         echo 'Waiting minio...' && sleep 1;
       done;
       /usr/bin/mc mb minio/revolt-uploads;

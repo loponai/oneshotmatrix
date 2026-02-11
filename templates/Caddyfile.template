@@ -1,4 +1,11 @@
 {$HOSTNAME} {
+	header {
+		Strict-Transport-Security "max-age=15552000; includeSubDomains"
+		X-Frame-Options SAMEORIGIN
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
 	route /api* {
 		uri strip_prefix /api
 		reverse_proxy http://api:14702 {

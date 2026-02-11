@@ -5,6 +5,17 @@ events = "wss://__DOMAIN__/ws"
 autumn = "https://__DOMAIN__/autumn"
 january = "https://__DOMAIN__/january"
 
+[database]
+mongodb = "mongodb://__MONGO_USER__:__MONGO_PASSWORD__@database:27017/revolt?authSource=admin"
+redis = "redis://default:__REDIS_PASSWORD__@redis:6379"
+
+[rabbit]
+amqp = "amqp://__RABBIT_USER__:__RABBIT_PASSWORD__@rabbit:5672"
+
+[files.s3]
+access_key_id = "__MINIO_USER__"
+secret_access_key = "__MINIO_PASSWORD__"
+
 [pushd.vapid]
 private_key = "__VAPID_PRIVATE_KEY__"
 public_key = "__VAPID_PUBLIC_KEY__"
