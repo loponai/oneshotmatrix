@@ -161,18 +161,18 @@ fi
 
 # ─── Platform selection ──────────────────────────────────────────────
 
-echo -e "${BOLD}Select your chat platform:${NC}"
+echo -e "${BOLD}Which chat platform do you want to install?${NC}"
 echo ""
 echo "  [1] Matrix/Element  - Federated, E2EE, Discord/Telegram bridges"
 echo "  [2] Stoat (Revolt)  - Modern UI, simple setup, no federation"
 echo ""
 
 while true; do
-    read -rp "  Platform (1 or 2): " platform_choice
+    read -rp "Type 1 or 2, then press Enter: " platform_choice
     case "$platform_choice" in
         1) PLATFORM="matrix"; break ;;
         2) PLATFORM="stoat"; break ;;
-        *) echo -e "  ${RED}Enter 1 or 2.${NC}" ;;
+        *) echo -e "  ${RED}Please enter 1 or 2.${NC}" ;;
     esac
 done
 
@@ -186,48 +186,61 @@ fi
 
 # ─── User prompts ────────────────────────────────────────────────────
 
-echo -e "${BOLD}Configure your server:${NC}"
+echo -e "${BOLD}Now we need a few details to set up your server.${NC}"
 echo ""
 
 # Domain
+echo "Enter the domain name you pointed to this server's IP address."
+echo -e "  ${CYAN}Example: chat.example.com${NC}"
+echo ""
 while true; do
-    read -rp "  Domain name (e.g., chat.example.com): " DOMAIN
+    read -rp "Your domain: " DOMAIN
     if [[ "$DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; then
         break
     fi
-    echo -e "  ${RED}Invalid domain. Use format: sub.example.com${NC}"
+    echo -e "  ${RED}That doesn't look right. Enter a domain like: chat.example.com${NC}"
 done
 
+echo ""
+
 # Email
+echo "Enter your email address (used for free SSL certificate from Let's Encrypt)."
+echo -e "  ${CYAN}This is only used for certificate expiry warnings — no spam.${NC}"
+echo ""
 while true; do
-    read -rp "  Email for SSL certificates: " ACME_EMAIL
+    read -rp "Your email: " ACME_EMAIL
     if [[ "$ACME_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
         break
     fi
-    echo -e "  ${RED}Invalid email address.${NC}"
+    echo -e "  ${RED}That doesn't look like an email address. Try again.${NC}"
 done
 
 # Matrix-only prompts
 if [ "$PLATFORM" = "matrix" ]; then
-    # Admin password
+    echo ""
+    echo "Choose a password for the admin account (@admin on your server)."
+    echo -e "  ${CYAN}Must be at least 8 characters. You'll use this to log in.${NC}"
+    echo ""
     while true; do
-        read -rsp "  Admin account password (min 8 chars): " ADMIN_PASSWORD
+        read -rsp "Admin password (typing is hidden): " ADMIN_PASSWORD
         echo ""
         if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
             break
         fi
-        echo -e "  ${RED}Password must be at least 8 characters.${NC}"
+        echo -e "  ${RED}Too short — must be at least 8 characters. Try again.${NC}"
     done
 
     # Bridges
     echo ""
-    read -rp "  Install Discord bridge? (Y/n): " discord_choice
+    echo "Bridges let you read Discord/Telegram messages inside your chat client."
+    echo ""
+    read -rp "Install Discord bridge? (Y/n): " discord_choice
     ENABLE_DISCORD=false
     if [[ ! "$discord_choice" =~ ^[Nn]$ ]]; then
         ENABLE_DISCORD=true
     fi
 
-    read -rp "  Install Telegram bridge? (Y/n): " telegram_choice
+    read -rp "Install Telegram bridge? (Y/n): " telegram_choice
     ENABLE_TELEGRAM=false
     if [[ ! "$telegram_choice" =~ ^[Nn]$ ]]; then
         ENABLE_TELEGRAM=true
@@ -235,7 +248,7 @@ if [ "$PLATFORM" = "matrix" ]; then
 fi
 
 echo ""
-echo -e "${GREEN}Configuration:${NC}"
+echo -e "${GREEN}Here's what we'll install:${NC}"
 echo "  Platform:        $PLATFORM"
 echo "  Domain:          $DOMAIN"
 echo "  Email:           $ACME_EMAIL"
@@ -244,7 +257,7 @@ if [ "$PLATFORM" = "matrix" ]; then
     echo "  Telegram bridge: $ENABLE_TELEGRAM"
 fi
 echo ""
-read -rp "Proceed with installation? (Y/n): " proceed
+read -rp "Look good? Press Enter to install, or type N to cancel: " proceed
 if [[ "$proceed" =~ ^[Nn]$ ]]; then
     echo "Aborted."
     exit 0
