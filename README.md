@@ -64,7 +64,8 @@ Replace `YOUR_SERVER_IP` with the IP from your Scala welcome email (e.g. `ssh ro
 > **Getting "Connection refused"?** If port 6543 doesn't work, try without `-p 6543` (some Scala plans use the default port 22). Check your welcome email for the correct SSH port.
 
 - It will ask "Are you sure you want to continue connecting?" — type `yes` and press Enter
-- Enter the **root password** from your Scala welcome email (the cursor won't move as you type — that's normal, it's hidden)
+- Enter the **root password** from your Scala welcome email
+  - **The screen will stay completely blank as you type or paste** — no dots, no stars, nothing. This is normal! Just paste your password and press Enter. It's there, you just can't see it.
 
 Once you're in, you'll see a command prompt on your server. Now disable SPanel's web server so our installer can use ports 80/443:
 
