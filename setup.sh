@@ -271,33 +271,33 @@ if [ "$PLATFORM" = "matrix" ]; then
 
 # ─── [1/11] Install dependencies ─────────────────────────────────────
 
-step "Installing system dependencies..."
+step "Installing system packages (curl, openssl, certbot, Docker)..."
 
 if ! pkg_update; then
-    fail "Package update failed. Check your internet connection and package sources."
+    fail "Could not update package lists. Is the server connected to the internet?"
 fi
 
 if [ "$OS_FAMILY" = "rhel" ]; then
     if ! pkg_install curl wget openssl certbot firewalld; then
-        fail "Failed to install system packages."
+        fail "Package install failed. Try running: dnf install -y curl wget openssl certbot firewalld"
     fi
 else
     if ! pkg_install curl wget openssl certbot ufw; then
-        fail "Failed to install system packages."
+        fail "Package install failed. Try running: apt-get install -y curl wget openssl certbot ufw"
     fi
 fi
 
 # Docker
 if ! command -v docker &>/dev/null; then
     if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
-        fail "Docker installation failed. Install manually: https://docs.docker.com/engine/install/"
+        fail "Docker installation failed. Try manually: https://docs.docker.com/engine/install/"
     fi
 fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
     if ! pkg_install docker-compose-plugin; then
-        fail "Docker Compose plugin installation failed."
+        fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
     fi
 fi
 
@@ -305,7 +305,7 @@ ok
 
 # ─── [2/11] Generate secrets ─────────────────────────────────────────
 
-step "Generating secrets..."
+step "Generating encryption keys and passwords..."
 
 # On re-run, preserve existing secrets to avoid breaking the database
 if [ -f "$INSTALL_DIR/.env" ]; then
@@ -327,7 +327,7 @@ ok
 
 # ─── [3/11] Create directory structure ───────────────────────────────
 
-step "Creating directory structure..."
+step "Creating data folders..."
 
 mkdir -p \
     "$DATA_DIR/synapse/media_store" \
@@ -343,7 +343,7 @@ ok
 
 # ─── [4/11] Write .env file ──────────────────────────────────────────
 
-step "Writing environment file..."
+step "Saving configuration..."
 
 cat > "$INSTALL_DIR/.env" <<ENVEOF
 PLATFORM=matrix
@@ -364,7 +364,7 @@ ok
 
 # ─── [5/11] Template configuration files ─────────────────────────────
 
-step "Generating configuration files..."
+step "Setting up Synapse, Element, Nginx, and Coturn configs..."
 
 # Synapse homeserver.yaml
 template "$INSTALL_DIR/templates/homeserver.yaml.template" "$DATA_DIR/synapse/homeserver.yaml"
@@ -425,7 +425,7 @@ ok
 
 # ─── [6/11] Obtain SSL certificate ───────────────────────────────────
 
-step "Obtaining SSL certificate from Let's Encrypt..."
+step "Getting SSL certificate (HTTPS) from Let's Encrypt..."
 
 # Stop anything on port 80
 systemctl stop nginx 2>/dev/null || true
@@ -441,7 +441,14 @@ certbot certonly \
     2>/dev/null
 
 if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-    fail "SSL certificate generation failed. Ensure DNS A record for ${DOMAIN} points to this server."
+    echo ""
+    echo -e "${RED}SSL certificate failed. This usually means one of:${NC}"
+    echo "  1. Your domain ($DOMAIN) doesn't point to this server's IP yet"
+    echo "  2. DNS changes haven't propagated (can take up to 24 hours)"
+    echo "  3. Port 80 is blocked (check your firewall/VPS provider)"
+    echo ""
+    echo "Fix the issue and re-run this installer — it will pick up where it left off."
+    exit 1
 fi
 
 # Patch certbot renewal config to use webroot (standalone only works when nginx is down)
@@ -461,7 +468,7 @@ ok
 
 # ─── [7/11] Configure firewall ───────────────────────────────────────
 
-step "Configuring firewall..."
+step "Opening firewall ports (SSH, HTTP, HTTPS, federation, voice)..."
 
 # Preserve SSH access before enabling firewall
 SSH_PORT=$(detect_ssh_port)
@@ -480,7 +487,7 @@ ok
 
 # ─── [8/11] Setup bridge configs ─────────────────────────────────────
 
-step "Configuring bridges..."
+step "Setting up Discord/Telegram bridges (downloading images)..."
 
 if [ "$ENABLE_DISCORD" = true ]; then
     # Bridge containers run as UID 1337 - must own dir before generating config
@@ -545,7 +552,7 @@ ok
 
 # ─── [9/11] Set permissions ──────────────────────────────────────────
 
-step "Setting file permissions..."
+step "Setting file permissions (so each service can access its data)..."
 
 # Synapse runs as UID 991 inside the container
 chown -R 991:991 "$DATA_DIR/synapse"
@@ -565,7 +572,7 @@ ok
 
 # ─── [10/11] Start the stack ─────────────────────────────────────────
 
-step "Starting Matrix stack (this may take a few minutes on first run)..."
+step "Starting all services (first run downloads Docker images — may take a few minutes)..."
 
 cd "$INSTALL_DIR"
 
@@ -581,17 +588,20 @@ fi
 COMPOSE_EXIT=0
 docker compose $PROFILES up -d 2>&1 || COMPOSE_EXIT=$?
 if [ "$COMPOSE_EXIT" -ne 0 ]; then
-    fail "Docker Compose failed to start (exit $COMPOSE_EXIT). Check: docker compose logs"
+    fail "Docker failed to start. Run 'docker compose logs' to see what went wrong."
 fi
 
 # Wait for Synapse to be ready
-echo -n "  Waiting for Synapse..."
+echo -n "  Waiting for Matrix server to come online..."
 for i in $(seq 1 60); do
     if docker compose exec -T synapse curl -sf http://localhost:8008/health >/dev/null 2>&1; then
         break
     fi
     if [ "$i" -eq 60 ]; then
-        fail "Synapse failed to start within 120 seconds. Check: docker compose logs synapse"
+        echo ""
+        echo -e "${RED}Matrix server didn't start within 2 minutes.${NC}"
+        echo "Run 'docker compose logs synapse' to see the error."
+        exit 1
     fi
     sleep 2
 done
@@ -600,7 +610,7 @@ ok
 
 # ─── [11/11] Create admin account ────────────────────────────────────
 
-step "Creating admin account..."
+step "Creating your admin account (@admin)..."
 
 # -c provides shared secret for auth, -p sets the user's password
 REGISTER_EXIT=0
@@ -614,9 +624,10 @@ REGISTER_OUTPUT=$(docker compose exec -T synapse register_new_matrix_user \
 if [ "$REGISTER_EXIT" -eq 0 ]; then
     ok
 elif echo "$REGISTER_OUTPUT" | grep -qi "already taken\|already exists\|in use"; then
-    echo -e "  ${YELLOW}[SKIP]${NC} Admin account already exists"
+    echo -e "  ${YELLOW}[SKIP]${NC} Admin account already exists (password unchanged)"
 else
-    echo -e "  ${RED}[WARN]${NC} Could not create admin account. Create manually after install:"
+    echo -e "  ${YELLOW}[SKIP]${NC} Could not create admin account automatically."
+    echo "         You can create it manually by running:"
     echo "         cd $INSTALL_DIR && docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml"
 fi
 
@@ -663,29 +674,30 @@ echo -e "${GREEN}  ╔═══════════════════�
 echo -e "${GREEN}  ║       Installation Complete!             ║${NC}"
 echo -e "${GREEN}  ╚══════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}Element Web:${NC}      https://${DOMAIN}"
-echo -e "  ${BOLD}Admin Account:${NC}    @admin:${DOMAIN}"
-echo -e "  ${BOLD}Admin Password:${NC}   (as entered above)"
+echo -e "${BOLD}  What to do now:${NC}"
+echo ""
+echo -e "  1. Open ${CYAN}https://${DOMAIN}${NC} in your browser"
+echo -e "  2. Log in with:"
+echo -e "       Username:  ${BOLD}admin${NC}"
+echo -e "       Password:  ${BOLD}(the password you just set)${NC}"
+echo ""
 
 if [ "$ENABLE_DISCORD" = true ]; then
-    echo -e "  ${BOLD}Discord Bridge:${NC}   ${GREEN}Active${NC} - DM @discordbot:${DOMAIN} to login"
+    echo -e "  ${BOLD}Discord Bridge:${NC} After logging in, start a DM with ${CYAN}@discordbot:${DOMAIN}${NC}"
+    echo -e "                  and send ${BOLD}!discord login${NC} to connect your Discord account."
+    echo ""
 fi
 if [ "$ENABLE_TELEGRAM" = true ]; then
-    echo -e "  ${BOLD}Telegram Bridge:${NC}  ${GREEN}Active${NC} - DM @telegrambot:${DOMAIN} to login"
+    echo -e "  ${BOLD}Telegram Bridge:${NC} Start a DM with ${CYAN}@telegrambot:${DOMAIN}${NC}"
+    echo -e "                   and send ${BOLD}!tg login${NC} to connect your Telegram."
+    echo ""
 fi
 
+echo -e "  ${BOLD}Invite friends:${NC} Share the link ${CYAN}https://${DOMAIN}${NC}"
+echo -e "                  They'll need an account — create one with:"
+echo -e "                  ${CYAN}cd $INSTALL_DIR && docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml${NC}"
 echo ""
-echo -e "  ${BOLD}Federation Test:${NC}  https://federationtester.matrix.org/#${DOMAIN}"
-echo -e "  ${BOLD}Credentials:${NC}      $CRED_FILE"
-echo ""
-echo -e "  ${YELLOW}Tip:${NC} Invite friends by sharing: https://${DOMAIN}"
-echo -e "  ${YELLOW}Note:${NC} Public registration is disabled. Create accounts with:"
-echo -e "        cd $INSTALL_DIR && docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml"
-echo ""
-echo -e "  ─────────────────────────────────────────────"
-echo -e "  ${CYAN}Need a VPS? Get \$200 free credit:${NC}"
-echo -e "  https://your-affiliate-link-here.example.com"
-echo -e "  ─────────────────────────────────────────────"
+echo -e "  ${BOLD}Saved to:${NC}  $CRED_FILE"
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
@@ -696,33 +708,33 @@ else
 
 # ─── [1/7] Install dependencies ──────────────────────────────────────
 
-step "Installing system dependencies..."
+step "Installing system packages (curl, openssl, Docker)..."
 
 if ! pkg_update; then
-    fail "Package update failed. Check your internet connection and package sources."
+    fail "Could not update package lists. Is the server connected to the internet?"
 fi
 
 if [ "$OS_FAMILY" = "rhel" ]; then
     if ! pkg_install curl openssl firewalld; then
-        fail "Failed to install system packages."
+        fail "Package install failed. Try running: dnf install -y curl openssl firewalld"
     fi
 else
     if ! pkg_install curl openssl ufw; then
-        fail "Failed to install system packages."
+        fail "Package install failed. Try running: apt-get install -y curl openssl ufw"
     fi
 fi
 
 # Docker
 if ! command -v docker &>/dev/null; then
     if ! curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
-        fail "Docker installation failed. Install manually: https://docs.docker.com/engine/install/"
+        fail "Docker installation failed. Try manually: https://docs.docker.com/engine/install/"
     fi
 fi
 
 # Verify docker compose plugin
 if ! docker compose version &>/dev/null; then
     if ! pkg_install docker-compose-plugin; then
-        fail "Docker Compose plugin installation failed."
+        fail "Docker Compose plugin missing. Try: https://docs.docker.com/compose/install/"
     fi
 fi
 
@@ -730,7 +742,7 @@ ok
 
 # ─── [2/7] Generate secrets ─────────────────────────────────────────
 
-step "Generating secrets..."
+step "Generating encryption keys..."
 
 # On re-run, preserve existing secrets
 if [ -f "$INSTALL_DIR/.env" ]; then
@@ -754,7 +766,7 @@ ok
 
 # ─── [3/7] Create directory structure ────────────────────────────────
 
-step "Creating directory structure..."
+step "Creating data folders..."
 
 mkdir -p \
     "$DATA_DIR/db" \
@@ -767,7 +779,7 @@ ok
 
 # ─── [4/7] Write configuration files ────────────────────────────────
 
-step "Writing configuration files..."
+step "Saving configuration files..."
 
 # .env
 cat > "$INSTALL_DIR/.env" <<ENVEOF
@@ -795,7 +807,7 @@ ok
 
 # ─── [5/7] Configure firewall ───────────────────────────────────────
 
-step "Configuring firewall..."
+step "Opening firewall ports (SSH, HTTP, HTTPS)..."
 
 SSH_PORT=$(detect_ssh_port)
 fw_allow "${SSH_PORT}/tcp"
@@ -807,29 +819,32 @@ ok
 
 # ─── [6/7] Start Stoat stack ────────────────────────────────────────
 
-step "Starting Stoat stack (this may take a few minutes on first run)..."
+step "Starting all services (first run downloads Docker images — may take a few minutes)..."
 
 cd "$INSTALL_DIR"
 
 COMPOSE_EXIT=0
 docker compose up -d 2>&1 || COMPOSE_EXIT=$?
 if [ "$COMPOSE_EXIT" -ne 0 ]; then
-    fail "Docker Compose failed to start (exit $COMPOSE_EXIT). Check: docker compose logs"
+    fail "Docker failed to start. Run 'docker compose logs' to see what went wrong."
 fi
 
 ok
 
 # ─── [7/7] Verify services ──────────────────────────────────────────
 
-step "Verifying services..."
+step "Waiting for Stoat to come online..."
 
-echo -n "  Waiting for API..."
+echo -n "  Checking API..."
 for i in $(seq 1 60); do
     if curl -sf "http://localhost:14702/" >/dev/null 2>&1; then
         break
     fi
     if [ "$i" -eq 60 ]; then
-        fail "Stoat API failed to start within 120 seconds. Check: docker compose logs api"
+        echo ""
+        echo -e "${RED}Stoat API didn't start within 2 minutes.${NC}"
+        echo "Run 'docker compose logs api' to see the error."
+        exit 1
     fi
     sleep 2
 done
@@ -865,17 +880,16 @@ echo -e "${GREEN}  ╔═══════════════════�
 echo -e "${GREEN}  ║       Installation Complete!             ║${NC}"
 echo -e "${GREEN}  ╚══════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}Stoat:${NC}            https://${DOMAIN}"
-echo -e "  ${BOLD}Register:${NC}         Create your account at the URL above"
-echo -e "  ${BOLD}Credentials:${NC}      $CRED_FILE"
+echo -e "${BOLD}  What to do now:${NC}"
 echo ""
-echo -e "  ${YELLOW}Tip:${NC} The first registered account becomes the server owner."
-echo -e "  ${YELLOW}Note:${NC} Caddy handles SSL automatically — no certbot needed."
+echo -e "  1. Open ${CYAN}https://${DOMAIN}${NC} in your browser"
+echo -e "  2. Click ${BOLD}Register${NC} to create your account"
+echo -e "     ${YELLOW}Important:${NC} The first account you create becomes the server owner!"
 echo ""
-echo -e "  ─────────────────────────────────────────────"
-echo -e "  ${CYAN}Need a VPS? Get \$200 free credit:${NC}"
-echo -e "  https://your-affiliate-link-here.example.com"
-echo -e "  ─────────────────────────────────────────────"
+echo -e "  ${BOLD}Invite friends:${NC} Share the link ${CYAN}https://${DOMAIN}${NC}"
+echo -e "                  They can register themselves."
+echo ""
+echo -e "  ${BOLD}Saved to:${NC}  $CRED_FILE"
 echo ""
 
 fi
