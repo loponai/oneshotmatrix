@@ -134,6 +134,9 @@ fw_reload() {
 
 # ─── Pre-flight ──────────────────────────────────────────────────────
 
+# Reopen stdin for interactive prompts (curl pipes eat stdin in install.sh)
+exec </dev/tty 2>/dev/null || true
+
 if [ "$(id -u)" -ne 0 ]; then
     echo -e "${RED}Error: Must run as root.${NC}"
     exit 1

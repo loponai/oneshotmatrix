@@ -42,9 +42,6 @@ fi
 
 echo -e "${GREEN}Detected:${NC} ${PRETTY_NAME:-$ID} (${OS_FAMILY})"
 
-# Reopen stdin for interactive prompts (curl pipes eat stdin)
-exec </dev/tty 2>/dev/null || true
-
 # Install git if missing
 if ! command -v git &>/dev/null; then
     echo "Installing git..."
