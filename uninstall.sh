@@ -9,12 +9,15 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Detect OS family
+# Detect OS family (lenient for uninstall — default to debian if unknown)
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
         OS_FAMILY="rhel"
+    elif [[ "$ID" == "ubuntu" || "$ID" == "debian" || "${ID_LIKE:-}" == *"debian"* || "${ID_LIKE:-}" == *"ubuntu"* ]]; then
+        OS_FAMILY="debian"
     else
+        echo -e "${YELLOW}Warning: Unknown OS ($ID). Firewall cleanup may be incomplete.${NC}"
         OS_FAMILY="debian"
     fi
 else

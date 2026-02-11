@@ -22,13 +22,17 @@ NC='\033[0m'
 if [ -z "${OS_FAMILY:-}" ]; then
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        if [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+        if [[ "$ID" == "ubuntu" || "$ID" == "debian" || "${ID_LIKE:-}" == *"debian"* || "${ID_LIKE:-}" == *"ubuntu"* ]]; then
+            OS_FAMILY="debian"
+        elif [[ "$ID" == "rocky" || "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
             OS_FAMILY="rhel"
         else
-            OS_FAMILY="debian"
+            echo -e "${RED}Error: Unsupported OS. Supported: Ubuntu, Debian, Rocky Linux, RHEL, CentOS. Detected: ${ID:-unknown}${NC}"
+            exit 1
         fi
     else
-        OS_FAMILY="debian"
+        echo -e "${RED}Error: Cannot detect OS (missing /etc/os-release).${NC}"
+        exit 1
     fi
 fi
 
@@ -74,25 +78,31 @@ template() {
 
 pkg_update() {
     if [ "$OS_FAMILY" = "debian" ]; then
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update -qq >/dev/null 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
+    else
+        dnf makecache -q >/dev/null 2>&1
     fi
-    # dnf doesn't need a separate update step
 }
 
 pkg_install() {
     if [ "$OS_FAMILY" = "rhel" ]; then
         dnf install -y -q "$@" >/dev/null 2>&1
     else
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y -qq "$@" >/dev/null 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" >/dev/null 2>&1
     fi
 }
 
 detect_ssh_port() {
-    # Read the actual listening SSH port (handles Scala's port 6543)
-    local port
-    port=$(ss -tlnp 2>/dev/null | grep -E 'sshd|"ssh"' | awk '{print $4}' | grep -oE '[0-9]+$' | head -1)
+    # Detect SSH port: check sshd_config first, then running sshd via ss
+    local port=""
+    # Primary: read from sshd config
+    if [ -f /etc/ssh/sshd_config ]; then
+        port=$(grep -iE '^\s*Port\s+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -1)
+    fi
+    # Fallback: check what sshd is actually listening on
+    if [ -z "$port" ]; then
+        port=$(ss -tlnp 2>/dev/null | grep '"sshd"' | awk '{print $4}' | rev | cut -d: -f1 | rev | head -1)
+    fi
     echo "${port:-22}"
 }
 
@@ -100,17 +110,31 @@ fw_allow() {
     # Usage: fw_allow 80/tcp  OR  fw_allow 49152:49200/udp
     local rule="$1"
     if [ "$OS_FAMILY" = "rhel" ]; then
-        firewall-cmd --permanent --zone=public --add-port="$rule" >/dev/null 2>&1 || true
+        if command -v firewall-cmd &>/dev/null; then
+            firewall-cmd --permanent --zone=public --add-port="$rule" >/dev/null 2>&1 || true
+        fi
     else
-        ufw allow "$rule" >/dev/null 2>&1 || true
+        if command -v ufw &>/dev/null; then
+            ufw allow "$rule" >/dev/null 2>&1 || true
+        fi
     fi
 }
 
 fw_enable() {
     if [ "$OS_FAMILY" = "rhel" ]; then
+        if ! command -v firewall-cmd &>/dev/null; then
+            echo -e "  ${YELLOW}Warning: firewalld not found — skipping firewall setup.${NC}"
+            echo -e "  ${YELLOW}You may need to open ports manually.${NC}"
+            return 0
+        fi
         systemctl enable --now firewalld >/dev/null 2>&1 || true
         firewall-cmd --reload >/dev/null 2>&1 || true
     else
+        if ! command -v ufw &>/dev/null; then
+            echo -e "  ${YELLOW}Warning: ufw not found — skipping firewall setup.${NC}"
+            echo -e "  ${YELLOW}You may need to open ports manually.${NC}"
+            return 0
+        fi
         ufw --force enable >/dev/null 2>&1 || true
     fi
 }
@@ -136,6 +160,12 @@ fw_reload() {
 
 # Reopen stdin for interactive prompts (curl pipes eat stdin in install.sh)
 exec </dev/tty 2>/dev/null || true
+
+if ! [ -t 0 ]; then
+    echo -e "${RED}Error: This script must be run interactively (needs a terminal for prompts).${NC}"
+    echo "Run it directly: sudo bash $INSTALL_DIR/setup.sh"
+    exit 1
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
     echo -e "${RED}Error: Must run as root.${NC}"
@@ -466,7 +496,7 @@ if [ -f "$RENEWAL_CONF" ]; then
     fi
     # Add webroot map section if missing
     if ! grep -q "\[\[webroot\]\]" "$RENEWAL_CONF"; then
-        printf "\n[[webroot]]\n${DOMAIN} = ${DATA_DIR}/certbot/www\n" >> "$RENEWAL_CONF"
+        printf '\n[[webroot]]\n%s = %s\n' "$DOMAIN" "$DATA_DIR/certbot/www" >> "$RENEWAL_CONF"
     fi
 fi
 
@@ -504,11 +534,12 @@ if [ "$ENABLE_DISCORD" = true ]; then
         dock.mau.dev/mautrix/discord:latest 2>/dev/null || true
 
     if [ -f "$DATA_DIR/mautrix-discord/config.yaml" ]; then
-        # Patch homeserver address/domain using broad patterns that match any default value
+        # Patch homeserver address/domain — match localhost, 127.0.0.1, example, or any default placeholder
         sed -i \
-            -e '/^\s*address:.*\(localhost\|example\)/{s|address:.*|address: http://synapse:8008|}' \
-            -e '/^\s*domain:.*\(localhost\|example\)/{s|domain:.*|domain: '"${DOMAIN}"'|}' \
+            -e '/^\s*address:.*\(localhost\|127\.0\.0\.1\|example\)/{s|address:.*|address: http://synapse:8008|}' \
+            -e '/^\s*domain:.*\(localhost\|127\.0\.0\.1\|example\)/{s|domain:.*|domain: '"${DOMAIN}"'|}' \
             -e 's|address: http://localhost:29334|address: http://mautrix-discord:29334|' \
+            -e 's|address: http://127\.0\.0\.1:29334|address: http://mautrix-discord:29334|' \
             "$DATA_DIR/mautrix-discord/config.yaml"
         # sed -i runs as root; restore ownership so container can read
         chown -R 1337:1337 "$DATA_DIR/mautrix-discord"
@@ -534,11 +565,12 @@ if [ "$ENABLE_TELEGRAM" = true ]; then
         dock.mau.dev/mautrix/telegram:latest 2>/dev/null || true
 
     if [ -f "$DATA_DIR/mautrix-telegram/config.yaml" ]; then
-        # Patch homeserver address/domain using broad patterns
+        # Patch homeserver address/domain — match localhost, 127.0.0.1, example, or any default placeholder
         sed -i \
-            -e '/^\s*address:.*\(localhost\|example\)/{s|address:.*|address: http://synapse:8008|}' \
-            -e '/^\s*domain:.*\(localhost\|example\)/{s|domain:.*|domain: '"${DOMAIN}"'|}' \
+            -e '/^\s*address:.*\(localhost\|127\.0\.0\.1\|example\)/{s|address:.*|address: http://synapse:8008|}' \
+            -e '/^\s*domain:.*\(localhost\|127\.0\.0\.1\|example\)/{s|domain:.*|domain: '"${DOMAIN}"'|}' \
             -e 's|address: http://localhost:29317|address: http://mautrix-telegram:29317|' \
+            -e 's|address: http://127\.0\.0\.1:29317|address: http://mautrix-telegram:29317|' \
             "$DATA_DIR/mautrix-telegram/config.yaml"
         # sed -i runs as root; restore ownership so container can read
         chown -R 1337:1337 "$DATA_DIR/mautrix-telegram"
@@ -594,7 +626,7 @@ fi
 COMPOSE_EXIT=0
 docker compose $PROFILES up -d 2>&1 || COMPOSE_EXIT=$?
 if [ "$COMPOSE_EXIT" -ne 0 ]; then
-    fail "Docker failed to start. Run 'docker compose logs' to see what went wrong."
+    fail "Docker failed to start. Run 'cd $INSTALL_DIR && docker compose logs' to see what went wrong."
 fi
 
 # Wait for Synapse to be ready
@@ -606,7 +638,7 @@ for i in $(seq 1 60); do
     if [ "$i" -eq 60 ]; then
         echo ""
         echo -e "${RED}Matrix server didn't start within 2 minutes.${NC}"
-        echo "Run 'docker compose logs synapse' to see the error."
+        echo "Run 'cd $INSTALL_DIR && docker compose logs synapse' to see the error."
         exit 1
     fi
     sleep 2
@@ -836,7 +868,7 @@ cd "$INSTALL_DIR"
 COMPOSE_EXIT=0
 docker compose up -d 2>&1 || COMPOSE_EXIT=$?
 if [ "$COMPOSE_EXIT" -ne 0 ]; then
-    fail "Docker failed to start. Run 'docker compose logs' to see what went wrong."
+    fail "Docker failed to start. Run 'cd $INSTALL_DIR && docker compose logs' to see what went wrong."
 fi
 
 ok
@@ -853,7 +885,7 @@ for i in $(seq 1 60); do
     if [ "$i" -eq 60 ]; then
         echo ""
         echo -e "${RED}Stoat API didn't start within 2 minutes.${NC}"
-        echo "Run 'docker compose logs api' to see the error."
+        echo "Run 'cd $INSTALL_DIR && docker compose logs api' to see the error."
         exit 1
     fi
     sleep 2
