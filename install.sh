@@ -54,9 +54,17 @@ if ! command -v git &>/dev/null; then
 fi
 
 # Clone or update repo
-if [ -d "$INSTALL_DIR" ]; then
+if [ -d "$INSTALL_DIR/.git" ]; then
     echo -n "Updating existing installation... "
-    git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 || true
+    if git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1; then
+        echo -e "${GREEN}done${NC}"
+    else
+        echo -e "${YELLOW}failed (using existing files)${NC}"
+    fi
+elif [ -d "$INSTALL_DIR" ]; then
+    echo "Existing directory found but not a git repo — removing and re-downloading..."
+    rm -rf "$INSTALL_DIR"
+    git clone -q "$REPO_URL" "$INSTALL_DIR" 2>&1
     echo -e "${GREEN}done${NC}"
 else
     echo -n "Downloading installer files... "
