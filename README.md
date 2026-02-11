@@ -188,6 +188,158 @@ cat /opt/matrix-discord-killer/credentials.txt
 
 ---
 
+## Using Element
+
+After installation, open your domain in a browser and log in with the admin account you created during setup.
+
+### Create Rooms
+
+1. Click the **+** next to any section in the left sidebar
+2. Choose **New room**
+3. Give it a name and optionally set it to private (encrypted by default)
+4. Your room appears in the sidebar, ready for messages
+
+### Create Spaces (like Discord servers)
+
+Spaces are groups of rooms — think of them as folders or communities.
+
+1. Click the **+** in the left sidebar → **Create a space**
+2. Name it and choose public or private
+3. Add existing rooms or create new ones inside the space
+
+### Invite People
+
+You need to create accounts for them first (public registration is off by default):
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml
+```
+
+Then share your server address — they log in at `https://yourdomain.com` or using any Matrix app pointed at your server.
+
+### End-to-End Encryption
+
+Private rooms are **encrypted by default**. Element will prompt you to set up a Security Key (cross-signing) on first login — do this, it protects your message history if you log in from a new device.
+
+### Voice & Video Calls
+
+Click the phone or camera icon in any room. Calls use your Coturn server (set up by the installer) for NAT traversal. Group calls work in rooms with video room features enabled.
+
+---
+
+## Admin Guide (Matrix)
+
+### Everyday Commands
+
+```bash
+cd /opt/matrix-discord-killer
+
+docker compose ps                # See what's running
+docker compose logs synapse      # Check Matrix server logs
+docker compose logs nginx        # Check reverse proxy logs
+docker compose logs coturn       # Check voice/video relay logs
+docker compose restart           # Restart everything
+docker compose down              # Stop everything
+docker compose up -d             # Start everything
+```
+
+### Update to Latest Version
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose pull
+docker compose up -d
+```
+
+### Create User Accounts
+
+Public registration is off by default (recommended). Create accounts from the command line:
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml
+```
+
+It will ask for a username, password, and whether to make them an admin.
+
+### Enable Public Registration
+
+If you want anyone to be able to sign up without you creating accounts:
+
+1. Edit the config:
+   ```bash
+   nano /opt/matrix-discord-killer/data/synapse/homeserver.yaml
+   ```
+2. Change this line:
+   ```yaml
+   enable_registration: true
+   ```
+3. Restart Synapse:
+   ```bash
+   cd /opt/matrix-discord-killer && docker compose restart synapse
+   ```
+
+> **Warning:** Open registration means anyone can create accounts on your server. Consider adding a CAPTCHA or rate limiting if you enable this.
+
+### Test Federation
+
+Federation lets your users communicate with people on other Matrix servers (like matrix.org).
+
+```bash
+# Check if federation is working
+curl -sf https://yourdomain.com/.well-known/matrix/server
+# Should return: {"m.server": "yourdomain.com:443"}
+
+# Or use the online tester
+# https://federationtester.matrix.org/#yourdomain.com
+```
+
+### Backup Your Data
+
+All persistent data lives in `/opt/matrix-discord-killer/data/`. To backup:
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose down
+tar -czf ~/matrix-backup-$(date +%Y%m%d).tar.gz data/ .env docker-compose.yml
+docker compose up -d
+```
+
+### SSL Certificate Renewal
+
+Certificates auto-renew via a cron job. To check or manually renew:
+
+```bash
+# Check when the cert expires
+certbot certificates
+
+# Manual renewal
+certbot renew --webroot -w /opt/matrix-discord-killer/data/certbot/www
+cd /opt/matrix-discord-killer && docker compose restart nginx coturn
+```
+
+### Key Files
+
+| File | What it does |
+|------|-------------|
+| `data/synapse/homeserver.yaml` | Main Synapse config — registration, federation, database |
+| `.env` | Domain, secrets, bridge toggles |
+| `credentials.txt` | Your saved admin login and secrets |
+| `docker-compose.yml` | Container definitions |
+| `data/synapse/media_store/` | Uploaded files, avatars, media |
+| `data/postgres/` | PostgreSQL database (messages, accounts) |
+| `data/coturn/turnserver.conf` | Voice/video relay configuration |
+| `data/nginx/matrix.conf` | Nginx reverse proxy rules |
+
+### Official Matrix Documentation
+
+- [Synapse admin guide](https://element-hq.github.io/synapse/latest/usage/administration/)
+- [Element Web docs](https://element.io/help)
+- [Matrix spec](https://spec.matrix.org/)
+
+---
+
 ## Using Stoat
 
 After installation, open your domain in a browser and register your account. The first account becomes the server owner.
