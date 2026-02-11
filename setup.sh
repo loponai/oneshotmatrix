@@ -307,13 +307,13 @@ if [ "$PLATFORM" = "matrix" ]; then
     echo ""
     read -rp "Install Discord bridge? (Y/n): " discord_choice
     ENABLE_DISCORD=false
-    if [[ ! "$discord_choice" =~ ^[Nn]$ ]]; then
+    if [[ ! "$discord_choice" =~ ^[Nn] ]]; then
         ENABLE_DISCORD=true
     fi
 
     read -rp "Install Telegram bridge? (Y/n): " telegram_choice
     ENABLE_TELEGRAM=false
-    if [[ ! "$telegram_choice" =~ ^[Nn]$ ]]; then
+    if [[ ! "$telegram_choice" =~ ^[Nn] ]]; then
         ENABLE_TELEGRAM=true
     fi
 fi
@@ -329,7 +329,7 @@ if [ "$PLATFORM" = "matrix" ]; then
 fi
 echo ""
 read -rp "Look good? Press Enter to install, or type N to cancel: " proceed
-if [[ "$proceed" =~ ^[Nn]$ ]]; then
+if [[ "$proceed" =~ ^[Nn] ]]; then
     echo "Aborted."
     exit 0
 fi

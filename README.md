@@ -93,7 +93,7 @@ The installer handles Docker, firewall, SSL, and all configuration automatically
 
 ### Step 5: Log in
 
-Open your domain in a browser. That's it.
+Open your domain in a browser — or install it as a desktop app (see [Desktop & Mobile Apps](#desktop--mobile-apps) below).
 
 ---
 
@@ -158,6 +158,28 @@ docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml
 ```
 
 **Stoat** — Open the web client and register. First account becomes server owner.
+
+### Desktop & Mobile Apps (Matrix)
+
+You don't have to use the browser — Element has apps for every platform, and they all support custom homeservers out of the box.
+
+**Desktop (Windows, macOS, Linux):**
+
+1. Download [Element Desktop](https://element.io/download) for your platform
+2. On the login screen, click **"Edit"** next to the homeserver URL
+3. Change it to `https://yourdomain.com`
+4. Log in with your account
+
+**Mobile:**
+
+- **Android** — [Google Play](https://play.google.com/store/apps/details?id=im.vector.app) or [F-Droid](https://f-droid.org/packages/im.vector.app/)
+- **iOS** — [App Store](https://apps.apple.com/app/element-messenger/id1083446067)
+- On the login screen, tap **"Edit"** next to the homeserver and enter `https://yourdomain.com`
+
+**Install as a PWA (alternative):**
+
+If you prefer not to install an app, you can turn the web client into a standalone desktop window:
+- **Chrome/Edge:** Visit your domain → click the install icon in the address bar (or menu → "Install app")
 
 ### View credentials
 ```bash
@@ -295,14 +317,41 @@ docker compose up -d
 | `data/db/` | MongoDB database (messages, accounts) |
 | `data/minio/` | Uploaded files and media |
 
-### Using Mobile/Desktop Apps
+### Desktop & Mobile Apps
 
-You can use the official Revolt apps with your self-hosted server:
+The web client works great in a browser, but you can also get a desktop-app experience:
 
-1. Download [Revolt](https://revolt.chat/download) for your platform
-2. On the login screen, look for "custom server" or "self-hosted" option
-3. Enter your domain (e.g. `https://tomsparkchat.com`)
-4. Log in with your account
+**Install as a desktop app (recommended):**
+
+This turns your self-hosted web client into a standalone window — no browser tabs, no URL bar, just your chat.
+
+- **Chrome/Edge:** Visit your domain → click the install icon in the address bar (or ⋮ menu → "Install app" / "Create shortcut" → check "Open as window")
+- **Firefox:** Not supported natively — use Chrome or Edge for this
+
+The installed app launches from your Start menu / Applications folder like any other program, and it's already connected to your server.
+
+**Official Stoat desktop app:**
+
+Stoat also has a [standalone desktop app](https://stoat.chat/download) for Windows, macOS, and Linux. This app connects to the official `stoat.chat` servers by default. To point it at your self-hosted server, launch it with:
+
+```bash
+# Windows (from the install directory)
+stoat-desktop.exe --force-server https://yourdomain.com
+
+# macOS
+/Applications/Stoat.app/Contents/MacOS/Stoat --force-server https://yourdomain.com
+
+# Linux
+./stoat-desktop --force-server https://yourdomain.com
+```
+
+> The `--force-server` flag is a developer option and may not work reliably in all versions. The PWA install method above is simpler and always works.
+
+**Mobile:**
+
+- **Android** (beta) — [Google Play](https://play.google.com/store/apps/details?id=chat.revolt)
+- **iOS** (beta) — [TestFlight](https://stoat.chat/download/ios)
+- Mobile apps may not support custom server URLs yet. As an alternative, use your phone's browser and "Add to Home Screen" for an app-like experience.
 
 ### Official Revolt Documentation
 
