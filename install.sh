@@ -57,13 +57,20 @@ fi
 # Clone or update repo
 if [ -d "$INSTALL_DIR/.git" ]; then
     echo -n "Updating existing installation... "
-    if git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1; then
+    if git -C "$INSTALL_DIR" fetch --all >/dev/null 2>&1 && git -C "$INSTALL_DIR" reset --hard origin/main >/dev/null 2>&1; then
         echo -e "${GREEN}done${NC}"
     else
-        echo -e "${YELLOW}failed (using existing files)${NC}"
+        echo -e "${YELLOW}pull failed, re-downloading...${NC}"
+        rm -rf "$INSTALL_DIR"
+        if ! git clone -q "$REPO_URL" "$INSTALL_DIR" >/dev/null 2>&1; then
+            echo -e "${RED}FAILED${NC}"
+            echo "Could not download installer. Check internet connectivity."
+            exit 1
+        fi
+        echo -e "${GREEN}done${NC}"
     fi
 elif [ -d "$INSTALL_DIR" ]; then
-    echo "Existing directory found but not a git repo — removing and re-downloading..."
+    echo "Existing directory found but not a git repo — re-downloading..."
     rm -rf "$INSTALL_DIR"
     if ! git clone -q "$REPO_URL" "$INSTALL_DIR" >/dev/null 2>&1; then
         echo -e "${RED}FAILED${NC}"
