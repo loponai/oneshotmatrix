@@ -237,6 +237,42 @@ By default anyone who visits your domain can register. To lock it down:
    cd /opt/matrix-discord-killer && docker compose restart api
    ```
 
+### Enable Email (Password Resets & Verification)
+
+By default, Stoat **cannot send emails** — there is no built-in mail server. This means "Forgot password" won't work until you configure SMTP. You need credentials from an email provider:
+
+| Provider | Free tier | Sign up |
+|----------|-----------|---------|
+| **Brevo** (Sendinblue) | 300 emails/day | [brevo.com](https://www.brevo.com/) |
+| **Resend** | 100 emails/day | [resend.com](https://resend.com/) |
+| **Mailgun** | 100 emails/day | [mailgun.com](https://www.mailgun.com/) |
+| **Gmail** | Use with app password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) |
+
+Once you have SMTP credentials, add this to your `Revolt.toml`:
+
+1. Edit the config:
+   ```bash
+   nano /opt/matrix-discord-killer/Revolt.toml
+   ```
+2. Add the `[api.smtp]` section (replace the values with your provider's details):
+   ```toml
+   [api.smtp]
+   host = "smtp.brevo.com"
+   port = 587
+   username = "your-smtp-username"
+   password = "your-smtp-password"
+   from_address = "noreply@yourdomain.com"
+   use_tls = true
+   ```
+3. Restart the API:
+   ```bash
+   cd /opt/matrix-discord-killer && docker compose restart api
+   ```
+
+> **Gmail example:** Use `host = "smtp.gmail.com"`, `port = 587`, your Gmail address as `username`, and an [app password](https://myaccount.google.com/apppasswords) (not your regular Gmail password) as `password`.
+
+After this, password reset emails, email verification, and other notifications will work.
+
 ### Backup Your Data
 
 All persistent data lives in `/opt/matrix-discord-killer/data/`. To backup:
