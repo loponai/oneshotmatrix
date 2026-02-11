@@ -8,186 +8,156 @@ curl -fsSL https://raw.githubusercontent.com/loponai/oneshotmatrix/main/install.
 
 ---
 
-## What You Get
+## Quick Start (Scala Hosting)
 
-Pick one platform per server during setup:
+We recommend [Scala Hosting](http://scala.tomspark.tech/) because their self-managed VPS gives you **full root access** out of the box — which is required for our Docker, firewall, and SSL configurations. KVM virtualization means Docker runs natively with zero issues.
 
-### Matrix/Element
-- **Element Web** - Modern chat UI at your domain root
-- **Synapse** - Matrix homeserver with federation
-- **PostgreSQL** - Production database (not SQLite)
-- **Coturn** - TURN/STUN server for voice and video calls
-- **Nginx** - Reverse proxy with automatic HTTPS and rate limiting
-- **Discord Bridge** (optional) - Access Discord servers from Element
-- **Telegram Bridge** (optional) - Access Telegram chats from Element
+### Step 1: Get a VPS
 
-### Stoat (Revolt)
-- **Stoat Web Client** - Discord-like modern chat UI
-- **Revolt API Server** - Rust backend with MongoDB
-- **Bonfire** - Real-time WebSocket events
-- **Autumn** - File upload server with MinIO S3 storage
-- **January** - URL metadata and image proxy
-- **Caddy** - Reverse proxy with automatic HTTPS (zero config)
-- **Push Notifications** - Built-in web push support
+1. Go to [Scala Hosting Self-Managed VPS](http://scala.tomspark.tech/)
+2. Pick **Build #1** (2 cores, 4GB RAM, 50GB NVMe) — $19.95/mo, plenty for a personal/small-community server
+3. Choose **Ubuntu** as the operating system
+4. Complete checkout and wait for your welcome email with your server IP and root password
 
-## Requirements
+### Step 2: Point your domain
 
-- A fresh **Ubuntu 22.04+** or **Debian 12+** VPS (1GB+ RAM, 2GB+ recommended)
-- A **domain name** with DNS pointed to your server
-- **Root access**
-
-> Need a VPS? [Get $200 free credit →](https://your-affiliate-link-here.example.com)
-
-## DNS Setup
-
-Before running the installer, create a DNS **A record** pointing your domain to your server's IP:
+Create a DNS **A record** pointing to your server IP. You can do this in Cloudflare, Namecheap, or wherever you manage DNS:
 
 | Type | Name | Value |
 |------|------|-------|
 | A | chat.example.com | YOUR_SERVER_IP |
 
-Wait for DNS propagation (usually 5-15 minutes) before installing.
+Wait 5-15 minutes for DNS to propagate.
 
-> **Stoat note:** No federation, so only one A record is needed. No TURN/STUN ports required.
+> **Cloudflare users:** Set the proxy to **DNS only** (grey cloud). Cloudflare doesn't support port 8448 (Matrix federation) and can interfere with SSL certificate generation.
 
-## Installation
+### Step 3: SSH in and disable SPanel
+
+Scala includes their SPanel control panel by default, which runs a web server on ports 80/443. We need those ports, so disable it first:
+
+```bash
+ssh root@YOUR_SERVER_IP
+```
+
+Use the root password from your Scala welcome email. Then run:
+
+```bash
+systemctl mask --now httpd
+systemctl mask --now nginx
+```
+
+> This disables SPanel's web admin UI, but you won't need it — everything is managed via SSH after the installer runs.
+
+### Step 4: Run the installer
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/loponai/oneshotmatrix/main/install.sh | sudo bash
 ```
 
-You'll be prompted for:
-1. **Platform** - Matrix/Element or Stoat (Revolt)
-2. **Domain name** - Your domain with DNS configured
-3. **Email** - For SSL certificates
-4. **Admin password** - (Matrix only) For the `@admin` account
-5. **Bridge selection** - (Matrix only) Optional Discord and Telegram bridges
+You'll be asked for:
+1. **Platform** — Matrix/Element or Stoat (Revolt)
+2. **Domain** — the domain you set up in Step 2
+3. **Email** — for SSL certificates
+4. **Admin password** — (Matrix only) for the `@admin` account
+5. **Bridges** — (Matrix only) optional Discord and Telegram bridges
 
-The installer handles everything: Docker, SSL, firewall, configuration.
+The installer handles Docker, firewall, SSL, and all configuration automatically.
 
-## Architecture
+### Step 5: Log in
+
+Open your domain in a browser. That's it.
+
+---
+
+## What You Get
 
 ### Matrix/Element
-```
-Internet → Nginx (80/443/8448)
-              ├→ Element Web (/)
-              ├→ Synapse (/_matrix/)
-              │    └→ PostgreSQL
-              ├→ Coturn (voice/video, host networking)
-              ├→ mautrix-discord (optional)
-              └→ mautrix-telegram (optional)
-```
-
-| Port | Purpose |
-|------|---------|
-| 80 | HTTP → HTTPS redirect + ACME challenges |
-| 443 | Element Web + Synapse client API |
-| 8448 | Matrix federation |
-| 3478 | TURN (TCP/UDP) |
-| 5349 | TURNS (TCP/UDP) |
-| 49152-49200 | TURN relay media (UDP) |
+- **Element Web** — Modern chat UI at your domain
+- **Synapse** — Matrix homeserver with federation
+- **PostgreSQL** — Production database
+- **Coturn** — TURN/STUN for voice and video calls
+- **Nginx** — Reverse proxy with auto HTTPS
+- **Discord Bridge** (optional) — Access Discord from Element
+- **Telegram Bridge** (optional) — Access Telegram from Element
 
 ### Stoat (Revolt)
-```
-Internet → Caddy (80/443)
-              ├→ Web client (/)
-              ├→ API server (/api)
-              ├→ Bonfire WebSocket (/ws)
-              ├→ Autumn file server (/autumn)
-              ├→ January metadata proxy (/january)
-              ├→ Gifbox (/gifbox)
-              ├→ Crond, Pushd (background)
-              └→ MongoDB, Redis, RabbitMQ, MinIO
-```
+- **Stoat Web Client** — Discord-like chat UI
+- **Revolt API** — Rust backend with MongoDB
+- **Caddy** — Reverse proxy with auto HTTPS
+- File uploads, push notifications, URL previews built in
 
-| Port | Purpose |
-|------|---------|
-| 80 | HTTP → HTTPS redirect (Caddy auto-HTTPS) |
-| 443 | All services via Caddy reverse proxy |
+## Why Scala Hosting?
 
-## Using Bridges (Matrix only)
+| Feature | Why it matters |
+|---------|---------------|
+| **Full root access** | Required for Docker, firewall, and SSL configuration |
+| **KVM virtualization** | Docker runs natively — no issues like OpenVZ |
+| **Unmetered bandwidth** | No surprise bills from federation traffic |
+| **NVMe storage** | Fast database reads/writes for Synapse + PostgreSQL |
+| **Free snapshots** | Backup before changes, roll back if needed |
+| **Scalable** | Add RAM ($3/GB) or CPU ($10/core) anytime |
 
-### Discord Bridge
+**Recommended plan:** [Self-Managed Build #1](http://scala.tomspark.tech/) — 2 cores, 4GB RAM, 50GB NVMe at **$19.95/mo**. Step up to Build #2 (4 cores, 8GB) for heavier usage.
 
-After installation, open Element and start a DM with `@discordbot:yourdomain.com`:
+---
 
+## After Installation
+
+### Using Bridges (Matrix only)
+
+**Discord** — Open Element, DM `@discordbot:yourdomain.com`:
 ```
 !discord login
 ```
+Follow the prompts. Your Discord servers will appear as Matrix rooms.
 
-Follow the prompts to connect your Discord account. Your Discord servers will appear as Matrix rooms.
-
-### Telegram Bridge
-
-Start a DM with `@telegrambot:yourdomain.com`:
-
+**Telegram** — DM `@telegrambot:yourdomain.com`:
 ```
 !tg login
 ```
+Enter your phone number and verification code. Telegram chats sync to Matrix.
 
-Enter your phone number and verification code. Your Telegram chats will sync to Matrix.
+### Managing Users
 
-## Managing Users
-
-### Matrix
-Public registration is disabled by default. Create accounts manually:
-
+**Matrix** — Public registration is off by default. Create accounts with:
 ```bash
 cd /opt/matrix-discord-killer
 docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml
 ```
 
-### Stoat
-Open the web client and register. The first registered account becomes the server owner.
-
-## Troubleshooting
-
-### Check service status
-```bash
-cd /opt/matrix-discord-killer
-docker compose ps
-docker compose logs           # All services
-```
-
-### Matrix-specific
-
-**Federation not working:**
-1. Check DNS: `dig A yourdomain.com`
-2. Test: https://federationtester.matrix.org
-3. Verify port 8448 is open: `ufw status`
-
-**Voice/video calls failing:**
-1. Check Coturn: `docker compose logs coturn`
-2. Verify TURN ports are open: `ufw status`
-3. Test from Element: Settings → Voice & Video → Test
-
-**SSL certificate issues:**
-```bash
-certbot renew --webroot -w /opt/matrix-discord-killer/data/certbot/www
-cd /opt/matrix-discord-killer && docker compose restart nginx coturn
-```
-
-### Stoat-specific
-
-**Web client not loading:**
-1. Check Caddy: `docker compose logs caddy`
-2. Check API: `docker compose logs api`
-3. Verify DNS A record resolves to your server
-
-**File uploads failing:**
-1. Check MinIO: `docker compose logs minio`
-2. Check Autumn: `docker compose logs autumn`
-3. Verify createbuckets ran: `docker compose logs createbuckets`
-
-**API returning errors:**
-1. Check MongoDB: `docker compose logs database`
-2. Check Redis: `docker compose logs redis`
-3. Check RabbitMQ: `docker compose logs rabbit`
+**Stoat** — Open the web client and register. First account becomes server owner.
 
 ### View credentials
 ```bash
 cat /opt/matrix-discord-killer/credentials.txt
 ```
+
+---
+
+## Troubleshooting
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose ps              # Service status
+docker compose logs            # All logs
+docker compose logs synapse    # Single service
+```
+
+**Federation not working?** Check DNS (`dig A yourdomain.com`), test at https://federationtester.matrix.org, verify port 8448 is open (`ufw status`).
+
+**Voice/video failing?** Check `docker compose logs coturn`, verify TURN ports open (`ufw status`), test in Element under Settings > Voice & Video.
+
+**SSL issues?**
+```bash
+certbot renew --webroot -w /opt/matrix-discord-killer/data/certbot/www
+cd /opt/matrix-discord-killer && docker compose restart nginx coturn
+```
+
+**Stoat not loading?** Check `docker compose logs caddy` and `docker compose logs api`.
+
+**Stoat uploads failing?** Check `docker compose logs minio` and `docker compose logs autumn`.
+
+---
 
 ## Uninstall
 
@@ -195,44 +165,62 @@ cat /opt/matrix-discord-killer/credentials.txt
 sudo /opt/matrix-discord-killer/uninstall.sh
 ```
 
-This permanently destroys all data including messages, accounts, and media.
+Permanently destroys all data including messages, accounts, and media.
 
-## Files
+---
+
+## Reference
+
+### Requirements
+
+- **Ubuntu 22.04+** or **Debian 12+** VPS with full root access (4GB RAM recommended)
+- A domain name with DNS pointed to your server
+- Ports 80/443 free (disable SPanel's web server first — see Step 3)
+
+### Architecture
+
+**Matrix/Element:**
+```
+Internet → Nginx (80/443/8448)
+              ├→ Element Web (/)
+              ├→ Synapse (/_matrix/)
+              │    └→ PostgreSQL
+              ├→ Coturn (voice/video)
+              ├→ mautrix-discord (optional)
+              └→ mautrix-telegram (optional)
+```
+
+**Stoat (Revolt):**
+```
+Internet → Caddy (80/443)
+              ├→ Web client, API, WebSocket
+              ├→ File server, URL proxy
+              └→ MongoDB, Redis, RabbitMQ, MinIO
+```
+
+### Ports
+
+| Port | Purpose |
+|------|---------|
+| 80 | HTTP → HTTPS redirect + ACME |
+| 443 | Element/Synapse or Stoat client |
+| 8448 | Matrix federation (Matrix only) |
+| 3478 | TURN TCP/UDP (Matrix only) |
+| 5349 | TURNS TCP/UDP (Matrix only) |
+| 49152-49200 | TURN relay media UDP (Matrix only) |
+
+> Stoat only needs ports 80 and 443.
+
+### File layout
 
 ```
 /opt/matrix-discord-killer/
-├── docker-compose.yml          # Matrix stack
-├── docker-compose.stoat.yml    # Stoat stack
-├── .env                        # Generated secrets (chmod 600)
-├── credentials.txt             # Login details (chmod 600)
-├── setup.sh
-├── uninstall.sh
-├── templates/                  # Config templates
-│   ├── homeserver.yaml.template
-│   ├── element-config.json.template
-│   ├── nginx.conf.template
-│   ├── matrix.conf.template
-│   ├── turnserver.conf.template
-│   ├── log.config.template
-│   ├── revolt.toml.template
-│   ├── stoat-env.web.template
-│   └── Caddyfile.template
-├── Revolt.toml                 # (Stoat only) Generated config
-├── .env.web                    # (Stoat only) Caddy/client env
-├── Caddyfile                   # (Stoat only) Caddy config
-└── data/
-    ├── synapse/                # (Matrix) Homeserver data + media
-    ├── postgres/               # (Matrix) Database
-    ├── element/                # (Matrix) Element Web config
-    ├── nginx/                  # (Matrix) Nginx configs
-    ├── coturn/                 # (Matrix) TURN server config
-    ├── mautrix-discord/        # (Matrix) Discord bridge data
-    ├── mautrix-telegram/       # (Matrix) Telegram bridge data
-    ├── db/                     # (Stoat) MongoDB data
-    ├── rabbit/                 # (Stoat) RabbitMQ data
-    ├── minio/                  # (Stoat) S3 file storage
-    ├── caddy-data/             # (Stoat) Caddy certificates
-    └── caddy-config/           # (Stoat) Caddy runtime config
+├── docker-compose.yml / docker-compose.stoat.yml
+├── .env                    # Generated secrets
+├── credentials.txt         # Login details
+├── setup.sh / uninstall.sh
+├── templates/              # Config templates
+└── data/                   # All persistent data
 ```
 
 ## License
