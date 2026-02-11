@@ -43,17 +43,15 @@ fi
 echo -e "${GREEN}Detected:${NC} ${PRETTY_NAME:-$ID} (${OS_FAMILY})"
 
 # Reopen stdin for interactive prompts (curl pipes eat stdin)
-if [ -t 0 ] || [ -e /dev/tty ]; then
-    exec </dev/tty
-fi
+exec </dev/tty 2>/dev/null || true
 
 # Install git if missing
 if ! command -v git &>/dev/null; then
     echo "Installing git..."
     if [ "$OS_FAMILY" = "rhel" ]; then
-        dnf install -y -q git >/dev/null 2>&1
+        dnf install -y -q git 2>&1 || { echo -e "${RED}Failed to install git. Run: dnf install -y git${NC}"; exit 1; }
     else
-        apt-get update -qq && apt-get install -y -qq git >/dev/null 2>&1
+        apt-get update -qq && apt-get install -y -qq git 2>&1 || { echo -e "${RED}Failed to install git.${NC}"; exit 1; }
     fi
 fi
 
@@ -64,7 +62,7 @@ if [ -d "$INSTALL_DIR" ]; then
     git -C "$INSTALL_DIR" pull --ff-only || true
 else
     echo "Cloning to $INSTALL_DIR..."
-    git clone "$REPO_URL" "$INSTALL_DIR"
+    git clone --progress "$REPO_URL" "$INSTALL_DIR"
 fi
 
 chmod +x "$INSTALL_DIR/setup.sh" "$INSTALL_DIR/uninstall.sh"
