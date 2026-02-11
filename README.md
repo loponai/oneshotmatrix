@@ -161,6 +161,84 @@ cat /opt/matrix-discord-killer/credentials.txt
 
 ---
 
+## Admin Guide (Stoat)
+
+### Everyday Commands
+
+```bash
+cd /opt/matrix-discord-killer
+
+docker compose ps                # See what's running
+docker compose logs api          # Check API logs
+docker compose logs caddy        # Check reverse proxy logs
+docker compose restart           # Restart everything
+docker compose down              # Stop everything
+docker compose up -d             # Start everything
+```
+
+### Update to Latest Version
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose pull
+docker compose up -d
+```
+
+### Make Your Server Invite-Only
+
+By default anyone who visits your domain can register. To lock it down:
+
+1. Edit the config:
+   ```bash
+   nano /opt/matrix-discord-killer/Revolt.toml
+   ```
+2. Add this line (or change it if it already exists):
+   ```toml
+   invite_only = true
+   ```
+3. Restart the API:
+   ```bash
+   cd /opt/matrix-discord-killer && docker compose restart api
+   ```
+
+### Backup Your Data
+
+All persistent data lives in `/opt/matrix-discord-killer/data/`. To backup:
+
+```bash
+cd /opt/matrix-discord-killer
+docker compose down
+tar -czf ~/stoat-backup-$(date +%Y%m%d).tar.gz data/ .env Revolt.toml
+docker compose up -d
+```
+
+### Key Files
+
+| File | What it does |
+|------|-------------|
+| `Revolt.toml` | Main config — features, limits, invite-only mode |
+| `.env` | Domain, secrets, encryption keys |
+| `credentials.txt` | Your saved setup info |
+| `docker-compose.stoat.yml` | Container definitions |
+| `data/db/` | MongoDB database (messages, accounts) |
+| `data/minio/` | Uploaded files and media |
+
+### Using Mobile/Desktop Apps
+
+You can use the official Revolt apps with your self-hosted server:
+
+1. Download [Revolt](https://revolt.chat/download) for your platform
+2. On the login screen, look for "custom server" or "self-hosted" option
+3. Enter your domain (e.g. `https://tomsparkchat.com`)
+4. Log in with your account
+
+### Official Revolt Documentation
+
+- [Self-hosted repo & config reference](https://github.com/stoatchat/self-hosted)
+- [Developer FAQ](https://developers.stoat.chat/faq.html/)
+
+---
+
 ## Troubleshooting
 
 ```bash
