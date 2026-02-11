@@ -88,7 +88,7 @@ services:
       - stoat
 
   api:
-    image: ghcr.io/revoltchat/server:20250930-2
+    image: ghcr.io/stoatchat/api:v0.11.0
     restart: unless-stopped
     depends_on:
       database:
@@ -103,7 +103,7 @@ services:
       - stoat
 
   events:
-    image: ghcr.io/revoltchat/bonfire:20250930-2
+    image: ghcr.io/stoatchat/events:v0.11.0
     restart: unless-stopped
     depends_on:
       database:
@@ -123,7 +123,7 @@ services:
       - stoat
 
   autumn:
-    image: ghcr.io/revoltchat/autumn:20250930-2
+    image: ghcr.io/stoatchat/file-server:v0.11.0
     restart: unless-stopped
     depends_on:
       database:
@@ -136,7 +136,7 @@ services:
       - stoat
 
   january:
-    image: ghcr.io/revoltchat/january:20250930-2
+    image: ghcr.io/stoatchat/proxy:v0.11.0
     restart: unless-stopped
     volumes:
       - ./Revolt.toml:/Revolt.toml:ro
@@ -144,7 +144,7 @@ services:
       - stoat
 
   gifbox:
-    image: ghcr.io/revoltchat/gifbox:20250930-2
+    image: ghcr.io/stoatchat/gifbox:v0.11.0
     restart: unless-stopped
     volumes:
       - ./Revolt.toml:/Revolt.toml:ro
@@ -152,7 +152,7 @@ services:
       - stoat
 
   crond:
-    image: ghcr.io/revoltchat/crond:20250930-2
+    image: ghcr.io/stoatchat/crond:v0.11.0
     restart: unless-stopped
     depends_on:
       database:
@@ -165,7 +165,7 @@ services:
       - stoat
 
   pushd:
-    image: ghcr.io/revoltchat/pushd:20250930-2
+    image: ghcr.io/stoatchat/pushd:v0.11.0
     restart: unless-stopped
     depends_on:
       database:
