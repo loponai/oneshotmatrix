@@ -844,12 +844,15 @@ chmod 600 "$INSTALL_DIR/.env"
 
 # Revolt.toml
 template "$INSTALL_DIR/templates/revolt.toml.template" "$INSTALL_DIR/Revolt.toml"
+chmod 644 "$INSTALL_DIR/Revolt.toml"
 
 # .env.web (Caddy hostname + web client API URL)
 template "$INSTALL_DIR/templates/stoat-env.web.template" "$INSTALL_DIR/.env.web"
+chmod 644 "$INSTALL_DIR/.env.web"
 
 # Caddyfile
 cp "$INSTALL_DIR/templates/Caddyfile.template" "$INSTALL_DIR/Caddyfile"
+chmod 644 "$INSTALL_DIR/Caddyfile"
 
 ok
 
