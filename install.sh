@@ -44,25 +44,30 @@ echo -e "${GREEN}Detected:${NC} ${PRETTY_NAME:-$ID} (${OS_FAMILY})"
 
 # Install git if missing
 if ! command -v git &>/dev/null; then
-    echo "Installing git..."
+    echo -n "Installing git... "
     if [ "$OS_FAMILY" = "rhel" ]; then
-        dnf install -y -q git 2>&1 || { echo -e "${RED}Failed to install git. Run: dnf install -y git${NC}"; exit 1; }
+        dnf install -y -q git 2>&1 || { echo -e "${RED}FAILED${NC}"; echo "Run manually: dnf install -y git"; exit 1; }
     else
-        apt-get update -qq && apt-get install -y -qq git 2>&1 || { echo -e "${RED}Failed to install git.${NC}"; exit 1; }
+        apt-get update -qq && apt-get install -y -qq git 2>&1 || { echo -e "${RED}FAILED${NC}"; echo "Run manually: apt-get install -y git"; exit 1; }
     fi
+    echo -e "${GREEN}done${NC}"
 fi
 
 # Clone or update repo
 if [ -d "$INSTALL_DIR" ]; then
-    echo "Existing installation found at $INSTALL_DIR"
-    echo "Pulling latest changes..."
-    git -C "$INSTALL_DIR" pull --ff-only || true
+    echo -n "Updating existing installation... "
+    git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 || true
+    echo -e "${GREEN}done${NC}"
 else
-    echo "Cloning to $INSTALL_DIR..."
-    git clone --progress "$REPO_URL" "$INSTALL_DIR"
+    echo -n "Downloading installer files... "
+    git clone -q "$REPO_URL" "$INSTALL_DIR" 2>&1
+    echo -e "${GREEN}done${NC}"
 fi
 
 chmod +x "$INSTALL_DIR/setup.sh" "$INSTALL_DIR/uninstall.sh"
+
+echo "Starting setup..."
+echo ""
 
 # Hand off to setup (redirect stdin to /dev/tty for interactive prompts,
 # since curl|bash leaves stdin as the exhausted pipe)
