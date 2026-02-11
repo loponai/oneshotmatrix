@@ -64,5 +64,6 @@ fi
 
 chmod +x "$INSTALL_DIR/setup.sh" "$INSTALL_DIR/uninstall.sh"
 
-# Hand off to setup
-exec "$INSTALL_DIR/setup.sh"
+# Hand off to setup (redirect stdin to /dev/tty for interactive prompts,
+# since curl|bash leaves stdin as the exhausted pipe)
+exec "$INSTALL_DIR/setup.sh" </dev/tty
