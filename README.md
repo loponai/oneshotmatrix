@@ -166,6 +166,37 @@ cat /opt/matrix-discord-killer/credentials.txt
 
 ---
 
+## Using Stoat
+
+After installation, open your domain in a browser and register your account. The first account becomes the server owner.
+
+### Create a Server
+
+1. Click the **+** button in the left sidebar
+2. Choose **Create a server**
+3. Give it a name — this is your community space
+4. Your server appears in the sidebar with a default **General** channel
+
+### Create Channels
+
+1. Click the **+** next to "Text Channels" (or "Voice Channels") in your server
+2. Name the channel and click **Create**
+
+### Invite People
+
+- **Quick invite:** Right-click any channel name → **Create Invite** — copy and share the link
+- **Manage invites:** Go to **Server Settings** → **Invites** to view, copy, or revoke existing invite links
+
+> If you enabled `invite_only = true` (see Admin Guide below), people will need an invite link to register. If registration is open, they can just visit your domain and sign up.
+
+### Customize Your Server
+
+- **Server icon:** Server Settings → Overview → click the server icon to upload
+- **Roles & permissions:** Server Settings → Roles → create roles and assign permissions
+- **Categories:** Right-click in the channel list → Create Category to organize channels into groups
+
+---
+
 ## Admin Guide (Stoat)
 
 ### Everyday Commands
