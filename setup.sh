@@ -938,6 +938,7 @@ ok
 
 step "Waiting for Stoat to come online..."
 
+echo -e "  ${YELLOW}This may appear to hang for up to 2 minutes — that's normal, it's waiting for services to start.${NC}"
 echo -n "  Checking API..."
 for i in $(seq 1 90); do
     if docker compose exec -T api curl -sf http://localhost:14702/ >/dev/null 2>&1; then
