@@ -1,3 +1,13 @@
+> ## ⚡ Want the easy, full version? → **[SparkBox](https://tomsparkbox.com)**
+>
+> This is one of my original one-shot scripts. It still works — but these days everything I build goes into **[SparkBox](https://tomsparkbox.com)**: a free, self-hosted home server that sets up this whole stack (and a lot more — photos, files, password manager, ad-blocking) with **one command**, a real web dashboard, automatic updates with one-click rollback, and a built-in AI assistant that troubleshoots and fixes things for you. No hand-editing config files.
+>
+> ### 👉 Get it free at **[tomsparkbox.com](https://tomsparkbox.com)**
+>
+> _Built by [Tom Spark Reviews](https://youtube.com/@TomSparkReviews)._
+
+---
+
 # matrix-discord-killer
 
 **Deploy a self-hosted chat platform in one command.** Choose between Matrix/Element (federated, E2EE, bridges) or Stoat/Revolt (modern UI, simple setup).
